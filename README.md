@@ -176,10 +176,13 @@ SENDGRID_API_KEY=SG.your-api-key-here
 FROM_EMAIL=noreply@beacontelematics.co.uk
 
 # MZone API
-MZONE_API_URL=https://api.myprofiler.com/oauth2/v1
-MZONE_REDIRECT_URI=https://beacontelematics.co.uk/api/v1/mzone/callback
-MZONE_CLIENT_ID=Tracking_GPS
+MZONE_TOKEN_URL=https://login.mzoneweb.net/connect/token
+MZONE_API_BASE=https://live.mzoneweb.net/mzone62.api
+MZONE_CLIENT_ID=mz-scopeuk
 MZONE_CLIENT_SECRET=g_SkQ.B.z3TeBU$g#hVeP#c2
+MZONE_USERNAME=ScopeUKAPI
+MZONE_PASSWORD=ScopeUKAPI01!
+MZONE_VEHICLE_GROUP_ID=e7042dff-f0d8-42ec-9324-c4b730cf177d
 ```
 
 See [.env.example](.env.example) for complete list.
