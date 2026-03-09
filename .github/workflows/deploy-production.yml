@@ -92,12 +92,50 @@ jobs:
             docker-compose down --remove-orphans
             docker-compose build
             docker-compose up -d
-            sleep 20
+            
+            echo "⏳ Waiting for containers to start..."
+            sleep 30
+            
+            echo "📊 Container Status:"
             docker-compose ps
-            echo "=== BeaconTelematics Flutter Web ==="
-            docker logs --tail 10 beacon_telematics_flutter_web
+            
+            echo ""
+            echo "=== Database Container ==="
+            docker logs --tail 10 beacon_telematics_db
+            
+            echo ""
+            echo "=== Backend Container ==="
+            docker logs --tail 10 beacon_telematics_backend
+            
+            echo ""
+            echo "=== Flutter Web Container ==="
+            docker logs --tail 20 beacon_telematics_flutter_web
+            
+            echo ""
+            echo "=== Nginx Container ==="
+            docker logs --tail 10 beacon_telematics_nginx
+            
+            echo ""
+            echo "⏳ Giving Flutter web extra time to fully start..."
+            sleep 15
           SSHEOF
           echo "✅ BeaconTelematics containers deployed"
+      
+      - name: Run Database Migrations
+        env:
+          DO_SERVER_IP: ${{ secrets.DO_SERVER_IP }}
+          DO_USER: ${{ secrets.DO_USER }}
+        run: |
+          echo "🗄️  Running database migrations..."
+          ssh $DO_USER@$DO_SERVER_IP << 'SSHEOF'
+            cd ~/beacon-telematics/gps-tracker
+            docker-compose exec -T backend alembic upgrade head || {
+              echo "⚠️  Migration failed, checking if database is ready..."
+              sleep 10
+              docker-compose exec -T backend alembic upgrade head
+            }
+          SSHEOF
+          echo "✅ Database migrations complete"
       
       - name: Post-Deployment Verification
         env:
@@ -114,11 +152,44 @@ jobs:
           echo "✅ Secrets verified successfully"
       
       - name: Health Check
+        env:
+          DO_SERVER_IP: ${{ secrets.DO_SERVER_IP }}
         run: |
           echo "🏥 Checking BeaconTelematics production health..."
-          sleep 5
-          curl -f http://${{ secrets.DO_SERVER_IP }}:8001/api/health || exit 1
-          echo "✅ BeaconTelematics backend healthy!"
+          
+          # Backend health check with retries
+          echo "Testing backend API..."
+          for i in {1..10}; do
+            if curl -f -s http://$DO_SERVER_IP:8001/api/health > /dev/null; then
+              echo "✅ Backend healthy!"
+              break
+            fi
+            echo "Attempt $i/10 failed, waiting..."
+            sleep 5
+            if [ $i -eq 10 ]; then
+              echo "❌ Backend health check failed after 10 attempts"
+              exit 1
+            fi
+          done
+          
+          # Flutter web check with retries
+          echo "Testing Flutter web app..."
+          for i in {1..12}; do
+            if curl -f -s -I http://$DO_SERVER_IP:3012/ > /dev/null; then
+              echo "✅ Flutter web healthy!"
+              break
+            fi
+            echo "Attempt $i/12 failed, waiting..."
+            sleep 5
+            if [ $i -eq 12 ]; then
+              echo "❌ Flutter web health check failed after 12 attempts"
+              echo "Container logs:"
+              ssh ${{ secrets.DO_USER }}@$DO_SERVER_IP "docker logs --tail 50 beacon_telematics_flutter_web"
+              exit 1
+            fi
+          done
+          
+          echo "✅ All health checks passed!"
       
       - name: Deployment Summary
         if: always()
@@ -126,24 +197,32 @@ jobs:
           echo "================================"
           echo "🚀 BeaconTelematics Deployment Complete!"
           echo "================================"
-          echo "Frontend: http://beacontelematics.co.uk/ (configure domain first)"
-          echo "Backend: http://${{ secrets.DO_SERVER_IP }}:8001/api/health"
-          echo "Admin: http://${{ secrets.DO_SERVER_IP }}:3010"
-          echo "Customer: http://${{ secrets.DO_SERVER_IP }}:3011"
-          echo "Flutter Web: http://${{ secrets.DO_SERVER_IP }}:3012"
+          echo ""
+          echo "📍 Access Points:"
+          echo "  Direct Access (via IP):"
+          echo "    - Frontend (via nginx): http://${{ secrets.DO_SERVER_IP }}:8080/"
+          echo "    - Backend API: http://${{ secrets.DO_SERVER_IP }}:8001/api/health"
+          echo "    - Admin Dashboard: http://${{ secrets.DO_SERVER_IP }}:3010/"
+          echo "    - Customer Dashboard: http://${{ secrets.DO_SERVER_IP }}:3011/"
+          echo "    - Flutter Web (direct): http://${{ secrets.DO_SERVER_IP }}:3012/"
+          echo ""
+          echo "  Domain Access (after DNS setup):"
+          echo "    - HTTP: http://beacontelematics.co.uk:8080/"
+          echo "    - HTTPS: https://beacontelematics.co.uk:8443/"
           echo ""
           echo "📋 Rollback Instructions (if needed):"
           echo "   ssh ${{ secrets.DO_USER }}@${{ secrets.DO_SERVER_IP }}"
           echo "   ~/beacon-telematics/rollback-deployment-beacon.sh"
-          echo "================================"
-          curl -f -I http://${{ secrets.DO_SERVER_IP }}:3012/ || exit 1
-          echo "✅ BeaconTelematics web app responding!"
           echo ""
           echo "🎉 BEACON TELEMATICS DEPLOYED!"
-          echo "Next Steps:"
-          echo "1. Configure nginx for beacontelematics.co.uk domain"
-          echo "2. Run certbot for SSL certificate"
-          echo "3. Update DNS A records to point to server IP"
+          echo ""
+          echo "📝 Next Steps:"
+          echo "1. ✅ Containers are running"
+          echo "2. ✅ Database migrations applied"
+          echo "3. ⏳ Configure DNS A records for beacontelematics.co.uk → ${{ secrets.DO_SERVER_IP }}"
+          echo "4. ⏳ Run certbot for SSL certificate (see SERVER_SETUP_GUIDE.md Step 3)"
+          echo "5. ⏳ Test via: http://beacontelematics.co.uk:8080/"
+          echo "================================"
       
       - name: Tag Release
         run: |
