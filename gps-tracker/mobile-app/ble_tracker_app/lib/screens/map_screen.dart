@@ -159,18 +159,8 @@ class _MapScreenState extends State<MapScreen> {
       print('🔄 MapScreen: Starting to load vehicle locations...');
       setState(() => _isLoading = true);
       
-      // Check backend health first
-      _logger.info('_loadTags: Checking backend health');
-      print('🏥 MapScreen: Checking backend health...');
-      final isHealthy = await _locationService.checkBackendHealth();
-      if (!isHealthy) {
-        _logger.error('_loadTags: Backend health check failed');
-        throw Exception('Backend server is not responding. Please check your internet connection or contact support.');
-      }
-      _logger.success('_loadTags: Backend is healthy');
-      print('✅ MapScreen: Backend is healthy');
-      
       // Fetch vehicle locations from backend (backend uses user's stored IMEIs)
+      // Note: Removed blocking health check - let the main API call handle connectivity
       _logger.network('GET /api/vehicles');
       print('📡 MapScreen: Fetching vehicles from backend...');
       final response = await _locationService.getVehicleLocations();

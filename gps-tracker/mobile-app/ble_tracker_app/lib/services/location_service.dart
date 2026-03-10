@@ -109,6 +109,16 @@ class LocationService {
       print('📚 Stack trace (first 5 lines):');
       print(stackTrace.toString().split('\n').take(5).join('\n'));
       print('========== LOCATION SERVICE ERROR END ==========\n');
+      
+      // Provide more user-friendly error messages for common issues
+      if (e.toString().contains('TimeoutException') || e.toString().contains('timed out')) {
+        throw Exception('Server is taking too long to respond. Please check your internet connection and try again.');
+      } else if (e.toString().contains('SocketException') || e.toString().contains('Failed host lookup')) {
+        throw Exception('Cannot reach server. Please check your internet connection.');
+      } else if (e.toString().contains('Connection refused') || e.toString().contains('Connection closed')) {
+        throw Exception('Server connection failed. The service may be temporarily unavailable.');
+      }
+      
       rethrow;
     }
   }
