@@ -7,7 +7,7 @@ import 'package:ble_tracker_app/theme/app_theme.dart';
 import 'package:ble_tracker_app/services/auth_service.dart';
 import 'package:ble_tracker_app/services/location_service.dart';
 import 'package:ble_tracker_app/screens/map_screen.dart';
-// import 'package:ble_tracker_app/screens/qr_scanner_screen.dart'; // Not supported on web
+import 'package:ble_tracker_app/screens/qr_scanner_screen.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -72,52 +72,33 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _openQRScanner() async {
-    // QR scanner not available on web or if disabled
-    if (kIsWeb) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('QR scanner not available on web. Please enter IMEI manually.'),
-          backgroundColor: Colors.orange,
-        ),
-      );
-      return;
-    }
-    
     // Request camera permission
     final status = await Permission.camera.request();
     
     if (status.isGranted) {
-      // QR scanner temporarily disabled - show message
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('QR scanner coming soon. Please enter IMEI manually.'),
-          backgroundColor: Colors.blue,
+      // Open QR scanner
+      final result = await Navigator.push<String>(
+        context,
+        MaterialPageRoute(
+          builder: (context) => QRScannerScreen(),
         ),
       );
-      
-      // // Open QR scanner
-      // final result = await Navigator.push<String>(
-      //   context,
-      //   MaterialPageRoute(
-      //     builder: (context) => QRScannerScreen(),
-      //   ),
-      // );
-      //
-      // if (result != null && mounted) {
-      //   // IMEI scanned successfully
-      //   setState(() {
-      //     _imeiController.text = result;
-      //     _selectedMethod = 'manual'; // Switch to manual view to show the scanned IMEI
-      //   });
-      //
-      //   ScaffoldMessenger.of(context).showSnackBar(
-      //     SnackBar(
-      //       content: Text('✅ IMEI scanned: $result'),
-      //       backgroundColor: Colors.green,
-      //       duration: Duration(seconds: 2),
-      //     ),
-      //   );
-      // }
+
+      if (result != null && mounted) {
+        // IMEI scanned successfully
+        setState(() {
+          _imeiController.text = result;
+          _selectedMethod = 'manual'; // Switch to manual view to show the scanned IMEI
+        });
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('✅ IMEI scanned: $result'),
+            backgroundColor: Colors.green,
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
     } else if (status.isDenied) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

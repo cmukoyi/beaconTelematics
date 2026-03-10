@@ -1,6 +1,5 @@
-import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:qr_code_scanner/qr_code_scanner.dart';
+import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 class QRScannerScreen extends StatefulWidget {
@@ -11,19 +10,9 @@ class QRScannerScreen extends StatefulWidget {
 }
 
 class _QRScannerScreenState extends State<QRScannerScreen> {
-  final GlobalKey qrKey = GlobalKey(debugLabel: 'QR');
-  QRViewController? controller;
+  MobileScannerController controller = MobileScannerController();
   String? scannedCode;
   bool isProcessing = false;
-
-  @override
-  void reassemble() {
-    super.reassemble();
-    if (Platform.isAndroid) {
-      controller?.pauseCamera();
-    }
-    controller?.resumeCamera();
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -32,16 +21,9 @@ class _QRScannerScreenState extends State<QRScannerScreen> {
       body: Stack(
         children: [
           // QR Scanner View
-          QRView(
-            key: qrKey,
-            onQRViewCreated: _onQRViewCreated,
-            overlay: QrScannerOverlayShape(
-              borderColor: Colors.lightBlueAccent,
-              borderRadius: 16,
-              borderLength: 40,
-              borderWidth: 8,
-              cutOutSize: MediaQuery.of(context).size.width * 0.7,
-            ),
+          MobileScanner(
+            controller: controller,
+            onDetect: _onDetect,
           ),
 
           // Top Info Bar
@@ -147,20 +129,26 @@ class _QRScannerScreenState extends State<QRScannerScreen> {
     );
   }
 
-  void _onQRViewCreated(QRViewController controller) {
-    this.controller = controller;
-    controller.scannedDataStream.listen((scanData) {
-      if (!isProcessing && scanData.code != null) {
+  void _onDetect(BarcodeCapture capture) {
+    if (isProcessing) return;
+    
+    final List<Barcode> barcodes = capture.barcodes;
+    
+    for (final barcode in barcodes) {
+      final String? code = barcode.rawValue;
+      
+      if (code != null && code.isNotEmpty) {
         setState(() {
           isProcessing = true;
         });
         
-        final imei = _extractIMEIFromQR(scanData.code!);
+        final imei = _extractIMEIFromQR(code);
         
         if (imei != null) {
           // Valid IMEI found
-          controller.pauseCamera();
+          controller.stop();
           Navigator.pop(context, imei);
+          return;
         } else {
           // No valid IMEI found
           setState(() {
@@ -178,18 +166,19 @@ class _QRScannerScreenState extends State<QRScannerScreen> {
           // Resume scanning after 2 seconds
           Future.delayed(Duration(seconds: 2), () {
             if (mounted) {
-              controller.resumeCamera();
+              setState(() {
+                isProcessing = false;
+              });
             }
           });
         }
+        break;
       }
-    });
+    }
   }
 
-  /// Extract IMEI from QR code data
-  /// Supports multiple QR code formats matching the web implementation
   String? _extractIMEIFromQR(String qrData) {
-    print('📱 Extracting IMEI from QR data: $qrData');
+    print('🔍 Attempting to extract IMEI from: $qrData');
 
     // Pattern 1: MHub369F:IMEI868695060772926:MAC format
     final pattern1 = RegExp(r'IMEI(\d{15})', caseSensitive: false);
