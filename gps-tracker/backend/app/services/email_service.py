@@ -301,7 +301,7 @@ class EmailService:
         """Send password reset email with reset link"""
         try:
             # Get base URL from environment or default
-            base_url = os.getenv("FRONTEND_URL", "https://pinplot.me")
+            base_url = os.getenv("FRONTEND_URL", "https://beacontelematics.co.uk")
             reset_link = f"{base_url}?reset_token={reset_token}"
             
             # Development mode - print to console (but still send email)
@@ -315,7 +315,7 @@ class EmailService:
             name = first_name if first_name else "there"
             
             msg = MIMEMultipart('alternative')
-            msg['Subject'] = 'Reset Your PinPlot Password'
+            msg['Subject'] = 'Reset Your Beacon Telematics Password'
             msg['From'] = self.from_email
             msg['To'] = to_email
             
@@ -325,7 +325,7 @@ class EmailService:
             
             Hi {name},
             
-            You requested to reset your password for your PinPlot account.
+            You requested to reset your password for your Beacon Telematics account.
             
             Click the link below to reset your password:
             {reset_link}
@@ -335,7 +335,7 @@ class EmailService:
             If you didn't request a password reset, please ignore this email and your password will remain unchanged.
             
             Best regards,
-            PinPlot Team
+            Beacon Telematics Team
             """
             
             # HTML version
@@ -349,7 +349,7 @@ class EmailService:
                   <div style="background-color: #f4f4f4; padding: 30px; border-radius: 0 0 8px 8px;">
                     <p style="font-size: 16px;">Hi {name},</p>
                     <p style="font-size: 16px;">
-                      You requested to reset your password for your PinPlot account.
+                      You requested to reset your password for your Beacon Telematics account.
                     </p>
                     <div style="text-align: center; margin: 30px 0;">
                       <a href="{reset_link}" 
@@ -374,7 +374,7 @@ class EmailService:
                     </p>
                   </div>
                   <p style="color: #999; font-size: 12px; margin-top: 20px; text-align: center;">
-                    Best regards,<br>PinPlot Team
+                    Best regards,<br>Beacon Telematics Team
                   </p>
                 </div>
               </body>
@@ -385,7 +385,7 @@ class EmailService:
             if self.use_sendgrid:
                 return self._send_via_sendgrid(
                     to_email=to_email,
-                    subject='Reset Your PinPlot Password',
+                    subject='Reset Your Beacon Telematics Password',
                     text_content=text,
                     html_content=html
                 )

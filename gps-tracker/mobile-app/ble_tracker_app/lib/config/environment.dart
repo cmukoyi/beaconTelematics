@@ -69,9 +69,9 @@ class Environment {
   /// Get user-friendly environment description
   static String get environmentDescription {
     if (kDebugMode) {
-      return 'Development (localhost:8000)';
+      return 'Development (localhost:8001)';
     } else {
-      return 'Production (pinplot.me)';
+      return 'Production (beacontelematics.co.uk)';
     }
   }
 }

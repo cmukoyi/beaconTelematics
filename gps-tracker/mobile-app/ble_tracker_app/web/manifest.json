@@ -1,6 +1,6 @@
 {
-    "name": "PinPlot GPS Tracker",
-    "short_name": "PinPlot",
+    "name": "Beacon Telematics GPS Tracker",
+    "short_name": "Beacon Telematics",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",

@@ -1738,7 +1738,7 @@ Best regards''',
             children: [
               fmap.TileLayer(
                 urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                userAgentPackageName: 'com.pinplot.tracker',
+                userAgentPackageName: 'com.beacontelematics.tracker',
                 maxZoom: 19,
                 keepBuffer: 8, // Keep 8 extra zoom levels in memory for smoother zooming
                 panBuffer: 4, // Load 4 extra tiles around viewport edges
