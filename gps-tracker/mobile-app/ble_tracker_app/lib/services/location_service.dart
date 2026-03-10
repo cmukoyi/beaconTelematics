@@ -4,6 +4,86 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:ble_tracker_app/services/logger_service.dart';
 import 'package:ble_tracker_app/config/environment.dart';
+import 'package:ble_tracker_app/models/trip_model.dart';
+
+/// Helper class for date range formatting
+class DateRange {
+  final DateTime startDate;
+  final DateTime endDate;
+  
+  DateRange({required this.startDate, required this.endDate});
+  
+  /// Format start date for API (ISO without milliseconds, UTC)
+  String get startDateFormatted {
+    final utc = startDate.toUtc();
+    return '${utc.year.toString().padLeft(4, '0')}-${utc.month.toString().padLeft(2, '0')}-${utc.day.toString().padLeft(2, '0')}T${utc.hour.toString().padLeft(2, '0')}:${utc.minute.toString().padLeft(2, '0')}:${utc.second.toString().padLeft(2, '0')}Z';
+  }
+  
+  /// Format end date for API (ISO without milliseconds, UTC)
+  String get endDateFormatted {
+    final utc = endDate.toUtc();
+    return '${utc.year.toString().padLeft(4, '0')}-${utc.month.toString().padLeft(2, '0')}-${utc.day.toString().padLeft(2, '0')}T${utc.hour.toString().padLeft(2, '0')}:${utc.minute.toString().padLeft(2, '0')}:${utc.second.toString().padLeft(2, '0')}Z';
+  }
+  
+  /// Get date range for today (00:00 to 23:59:59)
+  static DateRange today() {
+    final now = DateTime.now();
+    return DateRange(
+      startDate: DateTime(now.year, now.month, now.day),
+      endDate: DateTime(now.year, now.month, now.day, 23, 59, 59),
+    );
+  }
+  
+  /// Get date range for yesterday
+  static DateRange yesterday() {
+    final now = DateTime.now();
+    final yesterday = now.subtract(const Duration(days: 1));
+    return DateRange(
+      startDate: DateTime(yesterday.year, yesterday.month, yesterday.day),
+      endDate: DateTime(yesterday.year, yesterday.month, yesterday.day, 23, 59, 59),
+    );
+  }
+  
+  /// Get date range for this week (Monday to Sunday)
+  static DateRange thisWeek() {
+    final now = DateTime.now();
+    final weekday = now.weekday; // 1=Monday, 7=Sunday
+    final monday = now.subtract(Duration(days: weekday - 1));
+    final sunday = monday.add(const Duration(days: 6));
+    return DateRange(
+      startDate: DateTime(monday.year, monday.month, monday.day),
+      endDate: DateTime(sunday.year, sunday.month, sunday.day, 23, 59, 59),
+    );
+  }
+  
+  /// Get date range for previous week
+  static DateRange previousWeek() {
+    final now = DateTime.now();
+    final weekday = now.weekday;
+    final lastMonday = now.subtract(Duration(days: weekday + 6));
+    final lastSunday = lastMonday.add(const Duration(days: 6));
+    return DateRange(
+      startDate: DateTime(lastMonday.year, lastMonday.month, lastMonday.day),
+      endDate: DateTime(lastSunday.year, lastSunday.month, lastSunday.day, 23, 59, 59),
+    );
+  }
+  
+  /// Get date range for this month
+  static DateRange thisMonth() {
+    final now = DateTime.now();
+    final firstDay = DateTime(now.year, now.month, 1);
+    final lastDay = DateTime(now.year, now.month + 1, 0, 23, 59, 59);
+    return DateRange(startDate: firstDay, endDate: lastDay);
+  }
+  
+  /// Get date range for previous month
+  static DateRange previousMonth() {
+    final now = DateTime.now();
+    final firstDay = DateTime(now.year, now.month - 1, 1);
+    final lastDay = DateTime(now.year, now.month, 0, 23, 59, 59);
+    return DateRange(startDate: firstDay, endDate: lastDay);
+  }
+}
 
 /// Service for fetching vehicle locations from mzone API via backend
 class LocationService {
@@ -373,6 +453,155 @@ class LocationService {
       _logger.error('checkBackendHealth: Failed - $e');
       print('❌ Backend health check failed: $e');
       return false;
+    }
+  }
+  
+  /// Fetch trips for a vehicle within date range
+  Future<List<Trip>> getTrips({
+    required String vehicleId,
+    required DateTime startDate,
+    required DateTime endDate,
+  }) async {
+    try {
+      _logger.info('getTrips: Fetching trips for vehicle $vehicleId');
+      print('\n========== TRIPS SERVICE START ==========');
+      print('⏰ Timestamp: ${DateTime.now().toIso8601String()}');
+      print('📍 Fetching trips for vehicle: $vehicleId');
+      print('📅 Date range: ${startDate.toLocal()} to ${endDate.toLocal()}');
+      
+      // Get auth token
+      final authToken = await _getAuthToken();
+      if (authToken == null) {
+        _logger.error('getTrips: No auth token found');
+        throw Exception('No authentication token found');
+      }
+      
+      // Format dates for API (ISO without milliseconds)
+      final dateRange = DateRange(startDate: startDate, endDate: endDate);
+      
+      // Call backend API
+      final url = Uri.parse('$backendUrl/api/trips');
+      _logger.network('POST $url');
+      print('📡 Calling: POST $url');
+      
+      final requestBody = {
+        'vehicleId': vehicleId,
+        'startDate': dateRange.startDateFormatted,
+        'endDate': dateRange.endDateFormatted,
+      };
+      print('📤 Request body: $requestBody');
+      
+      final startTime = DateTime.now();
+      final response = await http.post(
+        url,
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $authToken',
+        },
+        body: json.encode(requestBody),
+      ).timeout(const Duration(seconds: 30));
+      
+      final duration = DateTime.now().difference(startTime);
+      _logger.network('Response ${response.statusCode} in ${duration.inMilliseconds}ms');
+      print('⏱️  Response received in ${duration.inMilliseconds}ms');
+      print('📊 Response status: ${response.statusCode}');
+      
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        final tripsData = data['trips'] as List? ?? [];
+        final trips = tripsData.map((tripJson) => Trip.fromJson(tripJson)).toList();
+        _logger.success('getTrips: Found ${trips.length} trips');
+        print('✅ SUCCESS: Found ${trips.length} trips');
+        print('========== TRIPS SERVICE END ==========\n');
+        return trips;
+      } else if (response.statusCode == 401) {
+        _logger.error('getTrips: 401 Unauthorized');
+        throw Exception('Session expired. Please login again.');
+      } else {
+        _logger.error('getTrips: Non-200 status ${response.statusCode}');
+        print('❌ ERROR: ${response.body}');
+        print('========== TRIPS SERVICE ERROR END ==========\n');
+        throw Exception('Failed to fetch trips');
+      }
+    } catch (e, stackTrace) {
+      _logger.error('getTrips: Exception - $e');
+      print('❌ EXCEPTION in getTrips: $e');
+      print('========== TRIPS SERVICE ERROR END ==========\n');
+      
+      // Provide user-friendly error messages
+      if (e.toString().contains('TimeoutException') || e.toString().contains('timed out')) {
+        throw Exception('Server is taking too long to respond. Please try again.');
+      } else if (e.toString().contains('SocketException') || e.toString().contains('Failed host lookup')) {
+        throw Exception('Cannot reach server. Please check your internet connection.');
+      }
+      
+      rethrow;
+    }
+  }
+  
+  /// Fetch trip events/waypoints for route plotting
+  Future<List<TripEvent>> getTripEvents(String tripId) async {
+    try {
+      _logger.info('getTripEvents: Fetching events for trip $tripId');
+      print('\n========== TRIP EVENTS SERVICE START ==========');
+      print('🗺️ Fetching route for trip: $tripId');
+      
+      // Get auth token
+      final authToken = await _getAuthToken();
+      if (authToken == null) {
+        _logger.error('getTripEvents: No auth token found');
+        throw Exception('No authentication token found');
+      }
+      
+      // Call backend API
+      final url = Uri.parse('$backendUrl/api/trips/$tripId/events');
+      _logger.network('GET $url');
+      print('📡 Calling: GET $url');
+      
+      final startTime = DateTime.now();
+      final response = await http.get(
+        url,
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $authToken',
+        },
+      ).timeout(const Duration(seconds: 30));
+      
+      final duration = DateTime.now().difference(startTime);
+      _logger.network('Response ${response.statusCode} in ${duration.inMilliseconds}ms');
+      print('⏱️  Response received in ${duration.inMilliseconds}ms');
+      print('📊 Response status: ${response.statusCode}');
+      
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        final eventsData = data['events'] as List? ?? [];
+        final events = eventsData.map((eventJson) => TripEvent.fromJson(eventJson)).toList();
+        _logger.success('getTripEvents: Found ${events.length} waypoints');
+        print('✅ SUCCESS: Found ${events.length} waypoints');
+        print('========== TRIP EVENTS SERVICE END ==========\n');
+        return events;
+      } else if (response.statusCode == 401) {
+        _logger.error('getTripEvents: 401 Unauthorized');
+        throw Exception('Session expired. Please login again.');
+      } else {
+        _logger.error('getTripEvents: Non-200 status ${response.statusCode}');
+        print('❌ ERROR: ${response.body}');
+        print('========== TRIP EVENTS SERVICE ERROR END ==========\n');
+        throw Exception('Failed to fetch trip route');
+      }
+    } catch (e) {
+      _logger.error('getTripEvents: Exception - $e');
+      print('❌ EXCEPTION in getTripEvents: $e');
+      print('========== TRIP EVENTS SERVICE ERROR END ==========\n');
+      
+      // Provide user-friendly error messages
+      if (e.toString().contains('TimeoutException') || e.toString().contains('timed out')) {
+        throw Exception('Server is taking too long to respond. Please try again.');
+      } else if (e.toString().contains('SocketException') || e.toString().contains('Failed host lookup')) {
+        throw Exception('Cannot reach server. Please check your internet connection.');
+      }
+      
+      rethrow;
     }
   }
 }

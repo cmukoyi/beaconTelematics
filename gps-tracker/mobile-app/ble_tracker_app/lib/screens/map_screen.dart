@@ -14,6 +14,7 @@ import 'package:ble_tracker_app/services/logger_service.dart';
 import 'package:ble_tracker_app/services/poi_service.dart';
 import 'package:ble_tracker_app/models/vehicle_model.dart';
 import 'package:ble_tracker_app/models/poi_model.dart';
+import 'package:ble_tracker_app/models/trip_model.dart';
 import 'package:ble_tracker_app/screens/home_screen.dart';
 import 'package:ble_tracker_app/screens/alerts_screen.dart';
 
@@ -57,6 +58,16 @@ class _MapScreenState extends State<MapScreen> {
   List<dynamic> _pois = []; // Store POIs
   List<fmap.CircleMarker> _geofenceCircles = []; // Geofence circles for flutter_map
   bool _showPOIs = true; // Toggle to show/hide POIs on map
+  
+  // Trips/Journeys management
+  List<Trip> _trips = []; // Store fetched trips
+  bool _isLoadingTrips = false;
+  String _selectedDateRange = 'Today'; // Current date filter
+  Vehicle? _selectedTripVehicle; // Vehicle selected for trips view
+  Trip? _selectedTrip; // Currently selected trip for route display
+  List<TripEvent>? _selectedTripRoute; // Route waypoints for selected trip
+  List<fmap.Polyline> _tripRoutePolylines = []; // Route polylines for flutter_map
+  List<fmap.Marker> _tripRouteMarkers = []; // Start/end markers for route
   
   // Helper to determine which map to use
   bool get _useAppleMaps => !kIsWeb && defaultTargetPlatform == TargetPlatform.iOS;
@@ -1749,6 +1760,13 @@ Best regards''',
               // Geofence circles layer
               if (_showPOIs && _geofenceCircles.isNotEmpty)
                 fmap.CircleLayer(circles: _geofenceCircles),
+              // Trip route polyline layer
+              if (_tripRoutePolylines.isNotEmpty)
+                fmap.PolylineLayer(polylines: _tripRoutePolylines),
+              // Trip route markers layer (start/end points)
+              if (_tripRouteMarkers.isNotEmpty)
+                fmap.MarkerLayer(markers: _tripRouteMarkers),
+              // Vehicle markers layer (always on top)
               fmap.MarkerLayer(markers: _flutterMapMarkers),
             ],
           ),
@@ -2032,32 +2050,158 @@ Best regards''',
 
   Widget _buildJourneysView() {
     return Container(
-      color: Colors.white,
-      padding: EdgeInsets.only(top: 80),
-      child: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.route, size: 80, color: Colors.grey.shade400),
-            SizedBox(height: 16),
-            Text(
-              'Journeys',
-              style: GoogleFonts.poppins(
-                fontSize: 24,
-                fontWeight: FontWeight.w600,
-                color: Colors.grey.shade700,
-              ),
+      color: Colors.grey.shade50,
+      child: Column(
+        children: [
+          // Header with vehicle selector and date filter
+          Container(
+            padding: EdgeInsets.only(top: 60, left: 16, right: 16, bottom: 12),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.05),
+                  blurRadius: 8,
+                  offset: Offset(0, 2),
+                ),
+              ],
             ),
-            SizedBox(height: 8),
-            Text(
-              'Track your asset journeys',
-              style: GoogleFonts.inter(
-                fontSize: 14,
-                color: Colors.grey.shade600,
-              ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Vehicle selector
+                if (_vehicles.isEmpty)
+                  Text(
+                    'No vehicles available',
+                    style: GoogleFonts.inter(
+                      fontSize: 14,
+                      color: Colors.grey.shade600,
+                    ),
+                  )
+                else
+                  Container(
+                    padding: EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: Colors.grey.shade100,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: DropdownButtonHideUnderline(
+                      child: DropdownButton<String>(
+                        value: _selectedTripVehicle?.id ?? _vehicles.first.id,
+                        isExpanded: true,
+                        icon: Icon(Icons.arrow_drop_down, color: AppTheme.brandPrimary),
+                        items: _vehicles.map((vehicle) {
+                          return DropdownMenuItem<String>(
+                            value: vehicle.id,
+                            child: Row(
+                              children: [
+                                Icon(Icons.directions_car, size: 18, color: AppTheme.brandPrimary),
+                                SizedBox(width: 8),
+                                Text(
+                                  vehicle.displayName,
+                                  style: GoogleFonts.inter(
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          );
+                        }).toList(),
+                        onChanged: (value) {
+                          if (value != null) {
+                            final vehicle = _vehicles.firstWhere((v) => v.id == value);
+                            setState(() {
+                              _selectedTripVehicle = vehicle;
+                            });
+                            _loadTrips();
+                          }
+                        },
+                      ),
+                    ),
+                  ),
+                SizedBox(height: 12),
+                // Date range selector
+                SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    children: [
+                      _buildDateChip('Today'),
+                      SizedBox(width: 8),
+                      _buildDateChip('Yesterday'),
+                      SizedBox(width: 8),
+                      _buildDateChip('This Week'),
+                      SizedBox(width: 8),
+                      _buildDateChip('Previous Week'),
+                      SizedBox(width: 8),
+                      _buildDateChip('This Month'),
+                      SizedBox(width: 8),
+                      _buildDateChip('Previous Month'),
+                    ],
+                  ),
+                ),
+              ],
             ),
-          ],
-        ),
+          ),
+          // Trips list
+          Expanded(
+            child: _vehicles.isEmpty
+                ? Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.directions_car_outlined, size: 64, color: Colors.grey.shade400),
+                        SizedBox(height: 16),
+                        Text(
+                          'No vehicles available',
+                          style: GoogleFonts.inter(
+                            fontSize: 16,
+                            color: Colors.grey.shade600,
+                          ),
+                        ),
+                      ],
+                    ),
+                  )
+                : _isLoadingTrips
+                    ? Center(child: CircularProgressIndicator())
+                    : _trips.isEmpty
+                        ? Center(
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(Icons.route, size: 64, color: Colors.grey.shade400),
+                                SizedBox(height: 16),
+                                Text(
+                                  'No trips found',
+                                  style: GoogleFonts.inter(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w500,
+                                    color: Colors.grey.shade700,
+                                  ),
+                                ),
+                                SizedBox(height: 8),
+                                Text(
+                                  'Try selecting a different date range',
+                                  style: GoogleFonts.inter(
+                                    fontSize: 14,
+                                    color: Colors.grey.shade600,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          )
+                        : RefreshIndicator(
+                            onRefresh: _loadTrips,
+                            child: ListView.builder(
+                              padding: EdgeInsets.all(16),
+                              itemCount: _trips.length,
+                              itemBuilder: (context, index) {
+                                return _buildTripCard(_trips[index]);
+                              },
+                            ),
+                          ),
+          ),
+        ],
       ),
     );
   }
@@ -3415,6 +3559,446 @@ View on $mapProvider to see the vehicle location.''';
         );
       }
     }
+  }
+  
+  // ==================== Trips/Journeys Helper Methods ====================
+  
+  Widget _buildDateChip(String label) {
+    final isSelected = _selectedDateRange == label;
+    return GestureDetector(
+      onTap: () {
+        setState(() {
+          _selectedDateRange = label;
+        });
+        _loadTrips();
+      },
+      child: Container(
+        padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        decoration: BoxDecoration(
+          color: isSelected ? AppTheme.brandPrimary : Colors.white,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: isSelected ? AppTheme.brandPrimary : Colors.grey.shade300,
+          ),
+        ),
+        child: Text(
+          label,
+          style: GoogleFonts.inter(
+            fontSize: 13,
+            fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
+            color: isSelected ? Colors.white : Colors.grey.shade700,
+          ),
+        ),
+      ),
+    );
+  }
+  
+  Widget _buildTripCard(Trip trip) {
+    final isSelected = _selectedTrip?.id == trip.id;
+    return Container(
+      margin: EdgeInsets.only(bottom: 12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: isSelected ? AppTheme.brandPrimary : Colors.transparent,
+          width: 2,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 8,
+            offset: Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(12),
+          onTap: () => _showTripRoute(trip),
+          child: Padding(
+            padding: EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Time range
+                Row(
+                  children: [
+                    Icon(Icons.access_time, size: 16, color: Colors.grey.shade600),
+                    SizedBox(width: 6),
+                    Text(
+                      '${trip.formattedStartTime} - ${trip.formattedEndTime}',
+                      style: GoogleFonts.inter(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.grey.shade900,
+                      ),
+                    ),
+                    Spacer(),
+                    // Distance badge
+                    Container(
+                      padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: Colors.blue.shade50,
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.straighten, size: 12, color: Colors.blue.shade700),
+                          SizedBox(width: 4),
+                          Text(
+                            trip.formattedDistance,
+                            style: GoogleFonts.inter(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.blue.shade700,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    SizedBox(width: 6),
+                    // Duration badge
+                    Container(
+                      padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: Colors.orange.shade50,
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.timer, size: 12, color: Colors.orange.shade700),
+                          SizedBox(width: 4),
+                          Text(
+                            trip.formattedDuration,
+                            style: GoogleFonts.inter(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.orange.shade700,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                SizedBox(height: 12),
+                // Start location
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(
+                      padding: EdgeInsets.all(6),
+                      decoration: BoxDecoration(
+                        color: Colors.green.shade50,
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(Icons.trip_origin, size: 14, color: Colors.green.shade700),
+                    ),
+                    SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        trip.startLocationDescription ?? 'Start location',
+                        style: GoogleFonts.inter(
+                          fontSize: 13,
+                          color: Colors.grey.shade700,
+                        ),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
+                SizedBox(height: 8),
+                // End location
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(
+                      padding: EdgeInsets.all(6),
+                      decoration: BoxDecoration(
+                        color: Colors.red.shade50,
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(Icons.place, size: 14, color: Colors.red.shade700),
+                    ),
+                    SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        trip.endLocationDescription ?? 'End location',
+                        style: GoogleFonts.inter(
+                          fontSize: 13,
+                          color: Colors.grey.shade700,
+                        ),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
+                // Driver info
+                if (trip.driverDescription != null) ..[
+                  SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Icon(Icons.person, size: 14, color: Colors.grey.shade500),
+                      SizedBox(width: 6),
+                      Text(
+                        trip.driverDescription!,
+                        style: GoogleFonts.inter(
+                          fontSize: 12,
+                          color: Colors.grey.shade600,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+                // View route button
+                SizedBox(height: 12),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    Text(
+                      isSelected ? 'Showing route' : 'Tap to view route',
+                      style: GoogleFonts.inter(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500,
+                        color: AppTheme.brandPrimary,
+                      ),
+                    ),
+                    SizedBox(width: 4),
+                    Icon(
+                      isSelected ? Icons.visibility : Icons.map,
+                      size: 14,
+                      color: AppTheme.brandPrimary,
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+  
+  Future<void> _loadTrips() async {
+    if (_vehicles.isEmpty) return;
+    
+    // Set selected vehicle if not set
+    _selectedTripVehicle ??= _vehicles.first;
+    
+    if (_selectedTripVehicle == null) return;
+    
+    setState(() {
+      _isLoadingTrips = true;
+    });
+    
+    try {
+      // Get date range based on selection
+      DateRange dateRange;
+      switch (_selectedDateRange) {
+        case 'Yesterday':
+          dateRange = DateRange.yesterday();
+          break;
+        case 'This Week':
+          dateRange = DateRange.thisWeek();
+          break;
+        case 'Previous Week':
+          dateRange = DateRange.previousWeek();
+          break;
+        case 'This Month':
+          dateRange = DateRange.thisMonth();
+          break;
+        case 'Previous Month':
+          dateRange = DateRange.previousMonth();
+          break;
+        default: // 'Today'
+          dateRange = DateRange.today();
+      }
+      
+      final trips = await _locationService.getTrips(
+        vehicleId: _selectedTripVehicle!.id,
+        startDate: dateRange.startDate,
+        endDate: dateRange.endDate,
+      );
+      
+      if (mounted) {
+        setState(() {
+          _trips = trips;
+          _isLoadingTrips = false;
+          // Clear selected trip if it's not in the new list
+          if (_selectedTrip != null && !trips.any((t) => t.id == _selectedTrip!.id)) {
+            _selectedTrip = null;
+            _selectedTripRoute = null;
+            _clearTripRoute();
+          }
+        });
+      }
+    } catch (e) {
+      _logger.error('Failed to load trips: $e');
+      if (mounted) {
+        setState(() {
+          _isLoadingTrips = false;
+          _trips = [];
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                Icon(Icons.error, color: Colors.white),
+                SizedBox(width: 12),
+                Expanded(child: Text('Failed to load trips: $e')),
+              ],
+            ),
+            backgroundColor: Colors.red,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          ),
+        );
+      }
+    }
+  }
+  
+  Future<void> _showTripRoute(Trip trip) async {
+    // If clicking the same trip, clear route
+    if (_selectedTrip?.id == trip.id) {
+      setState(() {
+        _selectedTrip = null;
+        _selectedTripRoute = null;
+      });
+      _clearTripRoute();
+      // Switch to Assets tab to show map
+      setState(() {
+        _selectedIndex = 0;
+      });
+      return;
+    }
+    
+    // Load trip route
+    setState(() {
+      _selectedTrip = trip;
+    });
+    
+    try {
+      final events = await _locationService.getTripEvents(trip.id);
+      
+      if (mounted) {
+        setState(() {
+          _selectedTripRoute = events;
+        });
+        
+        // Draw route on map
+        _drawTripRoute(events);
+        
+        // Switch to Assets tab to show the map with route
+        setState(() {
+          _selectedIndex = 0;
+        });
+      }
+    } catch (e) {
+      _logger.error('Failed to load trip route: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                Icon(Icons.error, color: Colors.white),
+                SizedBox(width: 12),
+                Expanded(child: Text('Failed to load route: $e')),
+              ],
+            ),
+            backgroundColor: Colors.red,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          ),
+        );
+      }
+    }
+  }
+  
+  void _drawTripRoute(List<TripEvent> events) {
+    if (events.isEmpty) return;
+    
+    // Create polyline for flutter_map
+    final points = events.map((e) => latlong.LatLng(e.latitude, e.longitude)).toList();
+    
+    final polyline = fmap.Polyline(
+      points: points,
+      color: Colors.blue,
+      strokeWidth: 4.0,
+    );
+    
+    // Create start marker
+    final startEvent = events.first;
+    final startMarker = fmap.Marker(
+      point: latlong.LatLng(startEvent.latitude, startEvent.longitude),
+      width: 40,
+      height: 40,
+      child: Icon(
+        Icons.trip_origin,
+        color: Colors.green,
+        size: 30,
+      ),
+    );
+    
+    // Create end marker
+    final endEvent = events.last;
+    final endMarker = fmap.Marker(
+      point: latlong.LatLng(endEvent.latitude, endEvent.longitude),
+      width: 40,
+      height: 40,
+      child: Icon(
+        Icons.place,
+        color: Colors.red,
+        size: 30,
+      ),
+    );
+    
+    setState(() {
+      _tripRoutePolylines = [polyline];
+      _tripRouteMarkers = [startMarker, endMarker];
+    });
+    
+    // Zoom map to show full route
+    _zoomToRoute(points);
+  }
+  
+  void _clearTripRoute() {
+    setState(() {
+      _tripRoutePolylines = [];
+      _tripRouteMarkers = [];
+    });
+  }
+  
+  void _zoomToRoute(List<latlong.LatLng> points) {
+    if (points.isEmpty) return;
+    
+    // Calculate bounds
+    double minLat = points.first.latitude;
+    double maxLat = points.first.latitude;
+    double minLng = points.first.longitude;
+    double maxLng = points.first.longitude;
+    
+    for (var point in points) {
+      if (point.latitude < minLat) minLat = point.latitude;
+      if (point.latitude > maxLat) maxLat = point.latitude;
+      if (point.longitude < minLng) minLng = point.longitude;
+      if (point.longitude > maxLng) maxLng = point.longitude;
+    }
+    
+    // Calculate center and zoom
+    final centerLat = (minLat + maxLat) / 2;
+    final centerLng = (minLng + maxLng) / 2;
+    
+    // Fit bounds with padding
+    _flutterMapController.move(
+      latlong.LatLng(centerLat, centerLng),
+      13.0, // Default zoom level
+    );
   }
 }
 

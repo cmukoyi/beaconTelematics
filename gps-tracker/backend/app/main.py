@@ -1289,6 +1289,179 @@ def get_vehicles(
         }
 
 
+# ==================== Trips / Journeys Management ====================
+
+@app.post("/api/trips")
+def get_trips(
+    request: dict,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Fetch trips for a vehicle within date range (proxy to MZone API)
+    
+    Request body:
+    {
+        "vehicleId": "xxx-xxx-xxx",
+        "startDate": "2024-01-15T00:00:00Z",
+        "endDate": "2024-01-15T23:59:59Z"
+    }
+    """
+    import os
+    debug = os.getenv('DEBUG', 'False').lower() == 'true'
+    
+    try:
+        vehicle_id = request.get('vehicleId')
+        start_date = request.get('startDate')
+        end_date = request.get('endDate')
+        
+        if not vehicle_id or not start_date or not end_date:
+            return {
+                "success": False,
+                "error": "Missing required parameters: vehicleId, startDate, endDate",
+                "trips": []
+            }
+        
+        if debug:
+            print(f"\n{'='*60}")
+            print(f"📱 User {current_user.email} requesting trips")
+            print(f"   Vehicle ID: {vehicle_id}")
+            print(f"   Date range: {start_date} to {end_date}")
+            print(f"{'='*60}\n")
+        
+        # Verify user has access to this vehicle
+        tag = db.query(BLETag).filter(
+            BLETag.user_id == current_user.id,
+            BLETag.is_active == True,
+            BLETag.id == vehicle_id
+        ).first()
+        
+        if not tag:
+            if debug:
+                print(f"❌ User does not have access to vehicle {vehicle_id}")
+            return {
+                "success": False,
+                "error": "Vehicle not found or access denied",
+                "trips": []
+            }
+        
+        # Get vehicle's MZone ID from tag's custom attributes or IMEI mapping
+        # For now, we'll use the tag's IMEI to look up the vehicle
+        from app.services.mzone_service import mzone_service
+        
+        # First get all vehicles to find the MZone vehicle ID
+        vehicles_data = mzone_service.get_all_vehicles()
+        if not vehicles_data:
+            return {
+                "success": False,
+                "error": "Failed to fetch vehicles from MZone",
+                "trips": []
+            }
+        
+        # Find vehicle matching this tag's IMEI
+        mzone_vehicle_id = None
+        for vehicle in vehicles_data.get('value', []):
+            if (vehicle.get('registration') == tag.imei or 
+                vehicle.get('unit_Description') == tag.imei):
+                mzone_vehicle_id = vehicle.get('id')
+                break
+        
+        if not mzone_vehicle_id:
+            if debug:
+                print(f"❌ Could not find MZone vehicle ID for IMEI {tag.imei}")
+            return {
+                "success": False,
+                "error": "Vehicle not found in MZone system",
+                "trips": []
+            }
+        
+        # Fetch trips from MZone
+        trips_data = mzone_service.get_trips(
+            vehicle_id=mzone_vehicle_id,
+            start_date=start_date,
+            end_date=end_date
+        )
+        
+        if not trips_data:
+            return {
+                "success": False,
+                "error": "Failed to fetch trips from MZone",
+                "trips": []
+            }
+        
+        trips = trips_data.get('value', [])
+        
+        if debug:
+            print(f"✅ Returning {len(trips)} trips")
+        
+        return {
+            "success": True,
+            "count": len(trips),
+            "trips": trips
+        }
+    
+    except Exception as e:
+        if debug:
+            print(f"❌ Error in /api/trips: {str(e)}")
+        return {
+            "success": False,
+            "error": str(e),
+            "trips": []
+        }
+
+
+@app.get("/api/trips/{trip_id}/events")
+def get_trip_events(
+    trip_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Fetch trip events/waypoints for route plotting (proxy to MZone API)
+    """
+    import os
+    debug = os.getenv('DEBUG', 'False').lower() == 'true'
+    
+    try:
+        if debug:
+            print(f"\n{'='*60}")
+            print(f"📱 User {current_user.email} requesting trip events")
+            print(f"   Trip ID: {trip_id}")
+            print(f"{'='*60}\n")
+        
+        from app.services.mzone_service import mzone_service
+        
+        # Fetch trip events from MZone
+        events_data = mzone_service.get_trip_events(trip_id)
+        
+        if not events_data:
+            return {
+                "success": False,
+                "error": "Failed to fetch trip events from MZone",
+                "events": []
+            }
+        
+        events = events_data.get('value', [])
+        
+        if debug:
+            print(f"✅ Returning {len(events)} waypoints")
+        
+        return {
+            "success": True,
+            "count": len(events),
+            "events": events
+        }
+    
+    except Exception as e:
+        if debug:
+            print(f"❌ Error in /api/trips/{trip_id}/events: {str(e)}")
+        return {
+            "success": False,
+            "error": str(e),
+            "events": []
+        }
+
+
 # ==================== POI / Geofence Management ====================
 
 @app.post("/api/v1/pois", response_model=POIResponse)

@@ -251,6 +251,135 @@ class MZoneService:
             if self.debug:
                 print(f"❌ Error in get_vehicles_with_locations: {str(e)}")
             return []
+    
+    def get_trips(
+        self,
+        vehicle_id: str,
+        start_date: str,
+        end_date: str
+    ) -> Optional[Dict]:
+        """
+        Fetch trips for a specific vehicle within date range
+        
+        Args:
+            vehicle_id: MZone vehicle ID (guid)
+            start_date: ISO 8601 UTC start date (e.g., "2024-01-15T00:00:00Z")
+            end_date: ISO 8601 UTC end date (e.g., "2024-01-15T23:59:59Z")
+        
+        Returns:
+            Dictionary with trips data or None on error
+        """
+        try:
+            token = self.get_oauth_token()
+            if not token:
+                if self.debug:
+                    print("❌ Failed to obtain OAuth token for trips")
+                return None
+            
+            url = f"{self.api_base}/Trips"
+            headers = {
+                'Authorization': f'Bearer {token}',
+                'Accept': 'application/json'
+            }
+            
+            # Build OData filter and parameters
+            params = {
+                '$filter': f"vehicle_Id eq {vehicle_id} and startUtcTimestamp ge {start_date} and endUtcTimestamp le {end_date}",
+                '$orderby': 'startUtcTimestamp desc',
+                '$select': 'id,vehicle_Id,vehicleDescription,duration,distance,startLocationDescription,startUtcTimestamp,endLocationDescription,endUtcTimestamp,driverDescription,driverKeyCode'
+            }
+            
+            if self.debug:
+                print(f"\n{'='*70}")
+                print(f"🚗 Fetching trips from MZone API")
+                print(f"   Vehicle ID: {vehicle_id}")
+                print(f"   Date range: {start_date} to {end_date}")
+                print(f"   URL: {url}")
+                print(f"{'='*70}")
+            
+            response = requests.get(url, headers=headers, params=params, timeout=30)
+            
+            if response.status_code == 200:
+                data = response.json()
+                trip_count = len(data.get('value', []))
+                if self.debug:
+                    print(f"✅ Fetched {trip_count} trips from MZone")
+                    if trip_count > 0:
+                        for trip in data.get('value', [])[:3]:  # Show first 3 trips
+                            print(f"   📍 Trip {trip.get('id')}: {trip.get('startLocationDescription')} → {trip.get('endLocationDescription')}")
+                    print(f"{'='*70}\n")
+                return data
+            else:
+                if self.debug:
+                    print(f"❌ Error fetching trips: {response.status_code}")
+                    print(f"   Response: {response.text}")
+                    print(f"{'='*70}\n")
+                return None
+        
+        except Exception as e:
+            if self.debug:
+                print(f"❌ Error in get_trips: {str(e)}")
+            return None
+    
+    def get_trip_events(self, trip_id: str) -> Optional[Dict]:
+        """
+        Fetch trip events/waypoints for route plotting
+        
+        Args:
+            trip_id: MZone trip ID (guid)
+        
+        Returns:
+            Dictionary with trip events data or None on error
+        """
+        try:
+            token = self.get_oauth_token()
+            if not token:
+                if self.debug:
+                    print("❌ Failed to obtain OAuth token for trip events")
+                return None
+            
+            url = f"{self.api_base}/Trips({trip_id})/events"
+            headers = {
+                'Authorization': f'Bearer {token}',
+                'Accept': 'application/json'
+            }
+            
+            params = {
+                '$orderby': 'utcTimestamp asc'
+            }
+            
+            if self.debug:
+                print(f"\n{'='*70}")
+                print(f"🗺️  Fetching trip events from MZone API")
+                print(f"   Trip ID: {trip_id}")
+                print(f"   URL: {url}")
+                print(f"{'='*70}")
+            
+            response = requests.get(url, headers=headers, params=params, timeout=30)
+            
+            if response.status_code == 200:
+                data = response.json()
+                event_count = len(data.get('value', []))
+                if self.debug:
+                    print(f"✅ Fetched {event_count} waypoints from MZone")
+                    if event_count > 0:
+                        first_event = data.get('value', [])[0]
+                        last_event = data.get('value', [])[-1] if event_count > 0 else None
+                        if first_event and last_event:
+                            print(f"   📍 Route: ({first_event.get('latitude')}, {first_event.get('longitude')}) → ({last_event.get('latitude')}, {last_event.get('longitude')})")
+                    print(f"{'='*70}\n")
+                return data
+            else:
+                if self.debug:
+                    print(f"❌ Error fetching trip events: {response.status_code}")
+                    print(f"   Response: {response.text}")
+                    print(f"{'='*70}\n")
+                return None
+        
+        except Exception as e:
+            if self.debug:
+                print(f"❌ Error in get_trip_events: {str(e)}")
+            return None
 
 
 # Singleton instance
