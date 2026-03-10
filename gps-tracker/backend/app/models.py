@@ -91,6 +91,7 @@ class BLETag(Base):
     last_seen = Column(DateTime(timezone=True))
     latitude = Column(String(50))
     longitude = Column(String(50))
+    location_description = Column(String(500))  # Formatted address from MZone API
     battery_level = Column(Integer)
     added_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())

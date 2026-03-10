@@ -251,12 +251,14 @@ class _MapScreenState extends State<MapScreen> {
               markerIcon = gmaps.BitmapDescriptor.defaultMarkerWithHue(gmaps.BitmapDescriptor.hueRed);
             }
             
-            // Prepare info window snippet with attributes count
+            // Prepare info window snippet with location description or coordinates
+            final locationInfo = position.locationDescription ?? 
+                '${position.latitude.toStringAsFixed(5)}, ${position.longitude.toStringAsFixed(5)}';
             final visibleAttrs = vehicle.visibleAttributes ?? {};
             final visibleCount = visibleAttrs.length;
             final snippet = visibleCount > 0
-                ? '${vehicle.registration ?? 'No registration'} • $visibleCount attribute${visibleCount > 1 ? 's' : ''}'
-                : vehicle.registration ?? 'No registration';
+                ? '$locationInfo • $visibleCount attribute${visibleCount > 1 ? 's' : ''}'
+                : locationInfo;
             
             newGoogleMarkers.add(
               gmaps.Marker(
@@ -274,11 +276,13 @@ class _MapScreenState extends State<MapScreen> {
           
           // Create Apple Maps annotation (for iOS)
           if (_useAppleMaps) {
+            final locationInfo = position.locationDescription ?? 
+                '${position.latitude.toStringAsFixed(5)}, ${position.longitude.toStringAsFixed(5)}';
             final visibleAttrs = vehicle.visibleAttributes ?? {};
             final visibleCount = visibleAttrs.length;
             final snippet = visibleCount > 0
-                ? '${vehicle.registration ?? 'No registration'} • $visibleCount attribute${visibleCount > 1 ? 's' : ''}'
-                : vehicle.registration ?? 'No registration';
+                ? '$locationInfo • $visibleCount attribute${visibleCount > 1 ? 's' : ''}'
+                : locationInfo;
                 
             newAppleAnnotations.add(
               apple.Annotation(

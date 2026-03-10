@@ -91,6 +91,7 @@ class LocationPollerService:
                 # Update tracker position in database
                 tracker.latitude = str(position.get('latitude'))
                 tracker.longitude = str(position.get('longitude'))
+                tracker.location_description = position.get('locationDescription')  # Save address from MZone
                 tracker.last_seen = datetime.utcnow()
                 
                 # Update description if available

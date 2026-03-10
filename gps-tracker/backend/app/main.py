@@ -1242,7 +1242,7 @@ def get_vehicles(
                         "utcTimestamp": tag.last_seen.isoformat() if tag.last_seen else None,
                         "speed": None,  # Not stored in database currently
                         "heading": None,  # Not stored in database currently
-                        "locationDescription": None,  # Not stored in database currently
+                        "locationDescription": tag.location_description,  # Formatted address from MZone
                     }
                 except (ValueError, TypeError):
                     pass
