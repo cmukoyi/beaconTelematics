@@ -1,7 +1,7 @@
 """Create admin models tables
 
 Revision ID: add_admin_models
-Revises: 
+Revises: 009
 Create Date: 2025-03-11
 
 """
@@ -12,7 +12,7 @@ from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
 revision = 'add_admin_models'
-down_revision = '009_add_mzone_vehicle_id_cache'
+down_revision = '009'
 branch_labels = None
 depends_on = None
 
