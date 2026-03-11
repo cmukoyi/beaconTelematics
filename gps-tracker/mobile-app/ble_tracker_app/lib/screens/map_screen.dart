@@ -62,6 +62,7 @@ class _MapScreenState extends State<MapScreen> {
   // Trips/Journeys management
   List<Trip> _trips = []; // Store fetched trips
   bool _isLoadingTrips = false;
+  bool _tripsInitiallyLoaded = false; // Track if trips have been loaded at least once
   String _selectedDateRange = 'Today'; // Current date filter
   Vehicle? _selectedTripVehicle; // Vehicle selected for trips view
   Trip? _selectedTrip; // Currently selected trip for route display
@@ -2049,6 +2050,16 @@ Best regards''',
   }
 
   Widget _buildJourneysView() {
+    // Auto-load trips on first display if vehicles are available
+    if (!_tripsInitiallyLoaded && _vehicles.isNotEmpty && !_isLoadingTrips) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && !_tripsInitiallyLoaded) {
+          _tripsInitiallyLoaded = true;
+          _loadTrips();
+        }
+      });
+    }
+    
     return Container(
       color: Colors.grey.shade50,
       child: Column(
