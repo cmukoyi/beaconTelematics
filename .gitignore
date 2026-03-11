@@ -13,6 +13,10 @@ venv/
 ENV/
 *.egg-info/
 .pytest_cache/
+.coverage
+htmlcov/
+test.db
+test_*.py.db
 
 # Environment files
 .env
