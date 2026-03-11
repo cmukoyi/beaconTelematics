@@ -185,10 +185,22 @@ async def admin_login(credentials: AdminLogin, request: Request, db: Session = D
         ip_address=request.client.host if request.client else None
     )
     
+    # Convert UUID to string for response
+    admin_data = {
+        "id": str(admin.id),
+        "username": admin.username,
+        "email": admin.email,
+        "full_name": admin.full_name,
+        "role": admin.role,
+        "is_active": admin.is_active,
+        "last_login": admin.last_login,
+        "created_at": admin.created_at
+    }
+    
     return {
         "access_token": token,
         "token_type": "bearer",
-        "admin": admin
+        "admin": admin_data
     }
 
 
