@@ -14,11 +14,14 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db, init_db
 from app.models import User, VerificationPIN, BLETag, POI, POITrackerLink, GeofenceAlert, PasswordResetToken, GeofenceState
+from app.models_admin import AdminUser, AppLog, AuditLog, BillingData
 from app.auth import verify_password, get_password_hash, create_access_token, decode_token
+from app.admin_auth import hash_password as admin_hash_password
 from app.services.email_service import EmailService
 from app.services.mzone_service import mzone_service
 from app.services.geofence_service import GeofenceService
 from app.services.location_poller_service import location_poller
+from app.routes_admin import router as admin_router
 import asyncio
 from app.schemas.poi import (
     POICreate, POIUpdate, POIResponse, POIWithArmedStatus,
@@ -177,6 +180,9 @@ app = FastAPI(
     description="Backend API for BLE tag tracking system"
 )
 
+# Include admin router
+app.include_router(admin_router)
+
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -200,9 +206,57 @@ email_service = EmailService()
 @app.on_event("startup")
 async def startup_event():
     init_db()
+    
+    # Create admin models tables
+    from app.models_admin import Base as AdminBase
+    from app.database import engine
+    AdminBase.metadata.create_all(bind=engine)
+    
+    # Initialize default admin user if not exists
+    try:
+        db = get_db().__next__()
+        admin = db.query(AdminUser).filter(AdminUser.username == "Admin").first()
+        if not admin:
+            from datetime import datetime
+            default_admin = AdminUser(
+                username="Admin",
+                email="admin@beacontelematics.co.uk",
+                hashed_password=admin_hash_password("123456789_Plus"),
+                full_name="System Administrator",
+                role="admin",
+                is_active=True,
+                created_at=datetime.utcnow()
+            )
+            db.add(default_admin)
+            db.commit()
+            print("✓ Default admin user created: Admin / 123456789_Plus")
+        
+        # Create system user for app logs
+        system_user = db.query(AdminUser).filter(AdminUser.username == "system").first()
+        if not system_user:
+            from datetime import datetime
+            import secrets
+            system_user = AdminUser(
+                username="system",
+                email="system@beacontelematics.co.uk",
+                hashed_password=admin_hash_password(secrets.token_hex(32)),
+                full_name="System Logger",
+                role="admin",
+                is_active=True,
+                created_at=datetime.utcnow()
+            )
+            db.add(system_user)
+            db.commit()
+            print("✓ System user created for app logs")
+        
+        db.close()
+    except Exception as e:
+        print(f"⚠️  Note: Admin initialization error (may be normal on first migration): {e}")
+    
     print("Database initialized!")
     print(f"SMTP configured: {email_service.smtp_host}:{email_service.smtp_port}")
     print("MailHog Web UI available at: http://localhost:8025")
+    print("Admin Portal available at: /admin/index.html")
     
     # Start background location poller
     asyncio.create_task(location_poller.start())
