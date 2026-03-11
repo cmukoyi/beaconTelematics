@@ -12,7 +12,7 @@ from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
 revision = 'add_admin_models'
-down_revision = None
+down_revision = '009_add_mzone_vehicle_id_cache'
 branch_labels = None
 depends_on = None
 
@@ -92,6 +92,7 @@ def upgrade():
         sa.Column('active_devices_by_user', postgresql.JSON()),
         sa.Column('imei_to_user', postgresql.JSON()),
         sa.Column('user_device_count', postgresql.JSON()),
+        sa.Column('meta_data', postgresql.JSON()),
         sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.func.now()),
         sa.Column('updated_at', sa.DateTime(timezone=True), onupdate=sa.func.now()),
         sa.PrimaryKeyConstraint('id')
@@ -108,7 +109,7 @@ def upgrade():
         sa.Column('amount', sa.Float(), server_default='0'),
         sa.Column('currency', sa.String(3), server_default='USD'),
         sa.Column('description', sa.Text()),
-        sa.Column('metadata', postgresql.JSON()),
+        sa.Column('meta_data', postgresql.JSON()),
         sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.func.now()),
         sa.PrimaryKeyConstraint('id')
     )

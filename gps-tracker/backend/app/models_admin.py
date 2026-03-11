@@ -108,6 +108,7 @@ class BillingData(Base):
     active_devices_by_user = Column(JSON)  # {user_id: [imei_list]}
     imei_to_user = Column(JSON)  # {imei: user_id}
     user_device_count = Column(JSON)  # {user_id: count}
+    meta_data = Column(JSON)  # Additional billing metadata
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
     
@@ -127,7 +128,7 @@ class BillingTransaction(Base):
     amount = Column(Float, default=0)
     currency = Column(String(3), default="USD")
     description = Column(Text)
-    metadata = Column(JSON)
+    meta_data = Column(JSON)  # Transaction metadata
     created_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)
     
     __table_args__ = (
