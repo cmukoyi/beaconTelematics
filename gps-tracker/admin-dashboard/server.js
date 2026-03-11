@@ -62,25 +62,44 @@ app.get('/health', (req, res) => {
 
 // Manifest endpoint for deployment verification
 app.get('/api/manifest', (req, res) => {
-  const publicDir = path.join(__dirname, 'public');
-  const files = fs.existsSync(publicDir) ? fs.readdirSync(publicDir) : [];
-  
-  const manifest = {
-    deployment: {
-      timestamp: new Date().toISOString(),
-      version: 'beacon-admin-dashboard',
-      environment: process.env.NODE_ENV || 'development'
-    },
-    files: files.map(file => ({
-      name: file,
-      path: `/public/${file}`,
-      size: fs.statSync(path.join(publicDir, file)).size,
-      modified: fs.statSync(path.join(publicDir, file)).mtime.toISOString()
-    }))
-  };
+  try {
+    const publicDir = path.join(__dirname, 'public');
+    const files = fs.existsSync(publicDir) ? fs.readdirSync(publicDir) : [];
+    
+    const manifest = {
+      deployment: {
+        timestamp: new Date().toISOString(),
+        version: 'beacon-admin-dashboard',
+        environment: process.env.NODE_ENV || 'development'
+      },
+      files: files
+        .map(file => {
+          try {
+            const filePath = path.join(publicDir, file);
+            const stat = fs.statSync(filePath);
+            return {
+              name: file,
+              path: `/public/${file}`,
+              size: stat.size,
+              modified: stat.mtime.toISOString()
+            };
+          } catch (err) {
+            console.warn(`⚠️  Could not stat file ${file}: ${err.message}`);
+            return null;
+          }
+        })
+        .filter(item => item !== null) // Remove null entries from failed stats
+    };
 
-  console.log(`📋 Manifest requested with ${files.length} files available`);
-  res.json(manifest);
+    console.log(`📋 Manifest requested with ${manifest.files.length} files available`);
+    res.json(manifest);
+  } catch (error) {
+    console.error(`❌ Manifest endpoint error: ${error.message}`);
+    res.status(500).json({ 
+      error: 'Failed to generate manifest',
+      message: error.message
+    });
+  }
 });
 
 // Serve the admin dashboard
