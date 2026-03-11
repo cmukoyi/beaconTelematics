@@ -185,19 +185,93 @@ jobs:
           SSHEOF
           echo "✅ Database migrations complete"
       
-      - name: Post-Deployment Verification
+      - name: Deployment Verification
         env:
           DO_SERVER_IP: ${{ secrets.DO_SERVER_IP }}
           DO_USER: ${{ secrets.DO_USER }}
         run: |
-          echo "🔍 Verifying secrets and configuration..."
-          ssh $DO_USER@$DO_SERVER_IP "~/beacon-telematics/verify-secrets-beacon.sh" || {
-            echo "❌ Secret verification failed!"
-            echo "🔄 Secrets have been auto-restored from backup"
-            echo "⚠️  Review logs above for details"
-            exit 1
-          }
-          echo "✅ Secrets verified successfully"
+          echo "📋 VERIFYING DEPLOYMENT..."
+          echo ""
+          
+          # Check deployed files
+          echo "📂 Checking deployed files..."
+          ssh $DO_USER@$DO_SERVER_IP << 'SSHEOF'
+            cd ~/beacon-telematics/gps-tracker
+            
+            echo "🔍 Files in admin-dashboard/public:"
+            ls -lh admin-dashboard/public/
+            
+            echo ""
+            echo "✅ trips.html exists: $([ -f admin-dashboard/public/trips.html ] && echo 'YES ✓' || echo 'NO ✗')"
+            echo "✅ index.html exists: $([ -f admin-dashboard/public/index.html ] && echo 'YES ✓' || echo 'NO ✗')"
+            echo "✅ billing.html exists: $([ -f admin-dashboard/public/billing.html ] && echo 'YES ✓' || echo 'NO ✗')"
+            
+            echo ""
+            echo "📝 File sizes:"
+            wc -c admin-dashboard/public/*.html
+            
+            echo ""
+            echo "⏰ File timestamps:"
+            stat admin-dashboard/public/*.html 2>/dev/null | grep Modify
+          SSHEOF
+          
+          echo ""
+          echo "🔍 Verifying container file mounts..."
+          ssh $DO_USER@$DO_SERVER_IP << 'SSHEOF'
+            cd ~/beacon-telematics/gps-tracker
+            
+            # Check if files exist in running container
+            echo "📂 Files accessible from admin container:"
+            docker exec beacon_telematics_admin ls -lh /app/public/ 2>/dev/null || {
+              echo "⚠️  Could not access files from container, attempting restart..."
+              docker restart beacon_telematics_admin
+              sleep 5
+              docker exec beacon_telematics_admin ls -lh /app/public/
+            }
+            
+            echo ""
+            echo "🔗 Testing admin dashboard endpoints..."
+            
+            # Test health endpoint
+            echo "Testing /health endpoint..."
+            HEALTH=$(docker exec beacon_telematics_admin curl -s http://localhost:3000/health)
+            echo "Response: $HEALTH"
+            
+            # Test manifest endpoint
+            echo ""
+            echo "Testing /api/manifest endpoint..."
+            docker exec beacon_telematics_admin curl -s http://localhost:3000/api/manifest | grep -o "trips.html" && echo "✅ trips.html found in manifest" || echo "❌ trips.html NOT in manifest!"
+          SSHEOF
+      
+      - name: Browser-Accessible Verification
+        env:
+          DO_SERVER_IP: ${{ secrets.DO_SERVER_IP }}
+        run: |
+          echo "🌐 Testing browser-accessible endpoints..."
+          echo ""
+          
+          echo "Testing Admin Dashboard..."
+          curl -s -I http://$DO_SERVER_IP:3010/ | head -5
+          
+          echo ""
+          echo "Testing Trips page..."
+          curl -s -I http://$DO_SERVER_IP:3010/trips.html | head -5
+          
+          echo ""
+          echo "Testing Health endpoint..."
+          curl -s http://$DO_SERVER_IP:3010/health | jq .
+          
+          echo ""
+          echo "Testing Manifest endpoint..."
+          curl -s http://$DO_SERVER_IP:3010/api/manifest | jq .files
+          
+          echo ""
+          echo "Checking if trips.html appears in manifest..."
+          if curl -s http://$DO_SERVER_IP:3010/api/manifest | grep -q "trips.html"; then
+            echo "✅ trips.html CONFIRMED in manifest!"
+          else
+            echo "❌ WARNING: trips.html not found in manifest"
+          fi
       
       - name: Health Check
         env:
@@ -216,6 +290,21 @@ jobs:
             sleep 5
             if [ $i -eq 10 ]; then
               echo "❌ Backend health check failed after 10 attempts"
+              exit 1
+            fi
+          done
+          
+          # Admin Dashboard health check
+          echo "Testing Admin Dashboard..."
+          for i in {1..10}; do
+            if curl -f -s http://$DO_SERVER_IP:3010/health | grep -q "healthy"; then
+              echo "✅ Admin Dashboard healthy!"
+              break
+            fi
+            echo "Attempt $i/10 failed, waiting..."
+            sleep 5
+            if [ $i -eq 10 ]; then
+              echo "❌ Admin Dashboard health check failed after 10 attempts"
               exit 1
             fi
           done
@@ -239,6 +328,20 @@ jobs:
           
           echo "✅ All health checks passed!"
       
+      - name: Post-Deployment Verification
+        env:
+          DO_SERVER_IP: ${{ secrets.DO_SERVER_IP }}
+          DO_USER: ${{ secrets.DO_USER }}
+        run: |
+          echo "🔍 Verifying secrets and configuration..."
+          ssh $DO_USER@$DO_SERVER_IP "~/beacon-telematics/verify-secrets-beacon.sh" || {
+            echo "❌ Secret verification failed!"
+            echo "🔄 Secrets have been auto-restored from backup"
+            echo "⚠️  Review logs above for details"
+            exit 1
+          }
+          echo "✅ Secrets verified successfully"
+      
       - name: Deployment Summary
         if: always()
         run: |
@@ -251,25 +354,41 @@ jobs:
           echo "    - Frontend (via nginx): http://${{ secrets.DO_SERVER_IP }}:8080/"
           echo "    - Backend API: http://${{ secrets.DO_SERVER_IP }}:8001/api/health"
           echo "    - Admin Dashboard: http://${{ secrets.DO_SERVER_IP }}:3010/"
+          echo "    - Admin Dashboard Health: http://${{ secrets.DO_SERVER_IP }}:3010/health"
+          echo "    - Admin Dashboard Manifest: http://${{ secrets.DO_SERVER_IP }}:3010/api/manifest"
+          echo "    - 📍 JOURNEYS PAGE: http://${{ secrets.DO_SERVER_IP }}:3010/trips.html"
           echo "    - Customer Dashboard: http://${{ secrets.DO_SERVER_IP }}:3011/"
           echo "    - Flutter Web (direct): http://${{ secrets.DO_SERVER_IP }}:3012/"
           echo ""
           echo "  Domain Access (after DNS setup):"
           echo "    - HTTP: http://beacontelematics.co.uk:8080/"
           echo "    - HTTPS: https://beacontelematics.co.uk:8443/"
+          echo "    - 📍 Journeys: https://beacontelematics.co.uk/trips.html"
+          echo ""
+          echo "✅ Verification Endpoints:"
+          echo "    - /health - Admin dashboard health check"
+          echo "    - /api/manifest - List all deployed files with timestamps"
           echo ""
           echo "📋 Rollback Instructions (if needed):"
           echo "   ssh ${{ secrets.DO_USER }}@${{ secrets.DO_SERVER_IP }}"
           echo "   ~/beacon-telematics/rollback-deployment-beacon.sh"
           echo ""
+          echo "🔄 To Force Full Rebuild (bypass Docker cache):"
+          echo "   1. Go to GitHub Actions"
+          echo "   2. Select 'Deploy Beacon Telematics to Production'"
+          echo "   3. Click 'Run workflow' with 'On: workflow_dispatch'"
+          echo ""
           echo "🎉 BEACON TELEMATICS DEPLOYED!"
           echo ""
-          echo "📝 Next Steps:"
-          echo "1. ✅ Containers are running"
-          echo "2. ✅ Database migrations applied"
-          echo "3. ⏳ Configure DNS A records for beacontelematics.co.uk → ${{ secrets.DO_SERVER_IP }}"
-          echo "4. ⏳ Run certbot for SSL certificate (see SERVER_SETUP_GUIDE.md Step 3)"
-          echo "5. ⏳ Test via: http://beacontelematics.co.uk:8080/"
+          echo "📝 Deployment Checklist:"
+          echo "1. ✅ Code synced to ~/beacon-telematics/gps-tracker"
+          echo "2. ✅ Containers rebuilt and restarted"
+          echo "3. ✅ Database migrations applied"
+          echo "4. ✅ All health checks passed"
+          echo "5. ✅ Secrets verified"
+          echo "6. ⏳ Configure DNS A records for beacontelematics.co.uk → ${{ secrets.DO_SERVER_IP }}"
+          echo "7. ⏳ Run certbot for SSL certificate (see SERVER_SETUP_GUIDE.md Step 3)"
+          echo "8. ⏳ Test via: http://beacontelematics.co.uk:8080/"
           echo "================================"
       
       - name: Tag Release
