@@ -65,6 +65,8 @@ class _MapScreenState extends State<MapScreen> {
   bool _isLoadingTrips = false;
   bool _tripsInitiallyLoaded = false; // Track if trips have been loaded at least once
   String _selectedDateRange = 'Today'; // Current date filter
+  DateTime? _customStartDate; // Custom date range start
+  DateTime? _customEndDate; // Custom date range end
   Vehicle? _selectedTripVehicle; // Vehicle selected for trips view
   Trip? _selectedTrip; // Currently selected trip for route display
   List<TripEvent>? _selectedTripRoute; // Route waypoints for selected trip
@@ -2149,6 +2151,8 @@ Best regards''',
                       _buildDateChip('This Month'),
                       SizedBox(width: 8),
                       _buildDateChip('Previous Month'),
+                      SizedBox(width: 8),
+                      _buildDateChip('Custom'),
                     ],
                   ),
                 ),
@@ -3580,10 +3584,16 @@ View on $mapProvider to see the vehicle location.''';
     final isSelected = _selectedDateRange == label;
     return GestureDetector(
       onTap: () {
-        setState(() {
-          _selectedDateRange = label;
-        });
-        _loadTrips();
+        if (label == 'Custom') {
+          _showCustomDateRangePicker();
+        } else {
+          setState(() {
+            _selectedDateRange = label;
+            _customStartDate = null;
+            _customEndDate = null;
+          });
+          _loadTrips();
+        }
       },
       child: Container(
         padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -3602,6 +3612,28 @@ View on $mapProvider to see the vehicle location.''';
             color: isSelected ? Colors.white : Colors.grey.shade700,
           ),
         ),
+      ),
+    );
+  }
+  
+  Future<void> _showCustomDateRangePicker() async {
+    final now = DateTime.now();
+    final initialStart = _customStartDate ?? now.subtract(Duration(days: 7));
+    final initialEnd = _customEndDate ?? now;
+
+    showDialog(
+      context: context,
+      builder: (context) => _CustomDateRangeDialog(
+        initialStartDate: initialStart,
+        initialEndDate: initialEnd,
+        onDateRangeSelected: (startDate, endDate) {
+          setState(() {
+            _selectedDateRange = 'Custom';
+            _customStartDate = startDate;
+            _customEndDate = endDate;
+          });
+          _loadTrips();
+        },
       ),
     );
   }
@@ -3852,22 +3884,37 @@ View on $mapProvider to see the vehicle location.''';
         case 'Previous Month':
           dateRange = DateRange.previousMonth();
           break;
+        case 'Custom':
+          if (_customStartDate != null && _customEndDate != null) {
+            dateRange = DateRange(
+              startDate: _customStartDate!,
+              endDate: _customEndDate!,
+            );
+          } else {
+            dateRange = DateRange.today();
+          }
+          break;
         default: // 'Today'
           dateRange = DateRange.today();
       }
       
-      final trips = await _locationService.getTrips(
+      final allTrips = await _locationService.getTrips(
         vehicleId: _selectedTripVehicle!.id,
         startDate: dateRange.startDate,
         endDate: dateRange.endDate,
       );
       
+      // Filter out trips with 0km distance
+      final filteredTrips = allTrips.where((trip) {
+        return trip.distance != null && trip.distance! > 0;
+      }).toList();
+      
       if (mounted) {
         setState(() {
-          _trips = trips;
+          _trips = filteredTrips;
           _isLoadingTrips = false;
           // Clear selected trip if it's not in the new list
-          if (_selectedTrip != null && !trips.any((t) => t.id == _selectedTrip!.id)) {
+          if (_selectedTrip != null && !filteredTrips.any((t) => t.id == _selectedTrip!.id)) {
             _selectedTrip = null;
             _selectedTripRoute = null;
             _clearTripRoute();
@@ -4202,5 +4249,242 @@ class _ArmDisarmDialogState extends State<_ArmDisarmDialog> {
           ),
       ],
     );
+  }
+}
+
+class _CustomDateRangeDialog extends StatefulWidget {
+  final DateTime initialStartDate;
+  final DateTime initialEndDate;
+  final Function(DateTime, DateTime) onDateRangeSelected;
+
+  const _CustomDateRangeDialog({
+    Key? key,
+    required this.initialStartDate,
+    required this.initialEndDate,
+    required this.onDateRangeSelected,
+  }) : super(key: key);
+
+  @override
+  State<_CustomDateRangeDialog> createState() => _CustomDateRangeDialogState();
+}
+
+class _CustomDateRangeDialogState extends State<_CustomDateRangeDialog> {
+  late DateTime _startDate;
+  late DateTime _endDate;
+
+  @override
+  void initState() {
+    super.initState();
+    _startDate = widget.initialStartDate;
+    _endDate = widget.initialEndDate;
+  }
+
+  Future<void> _selectStartDate() async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _startDate,
+      firstDate: DateTime(2020),
+      lastDate: _endDate,
+    );
+    if (picked != null) {
+      setState(() {
+        _startDate = picked;
+      });
+    }
+  }
+
+  Future<void> _selectEndDate() async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _endDate,
+      firstDate: _startDate,
+      lastDate: DateTime.now(),
+    );
+    if (picked != null) {
+      setState(() {
+        _endDate = picked;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: Container(
+        padding: EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Select Date Range',
+              style: GoogleFonts.poppins(
+                fontSize: 18,
+                fontWeight: FontWeight.w700,
+                color: AppTheme.brandPrimary,
+              ),
+            ),
+            SizedBox(height: 24),
+            // Start Date
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Start Date',
+                  style: GoogleFonts.inter(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.grey.shade700,
+                  ),
+                ),
+                SizedBox(height: 8),
+                InkWell(
+                  onTap: _selectStartDate,
+                  borderRadius: BorderRadius.circular(12),
+                  child: Container(
+                    padding: EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      border: Border.all(color: Colors.grey.shade300),
+                      borderRadius: BorderRadius.circular(12),
+                      color: Colors.grey.shade50,
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          _formatDate(_startDate),
+                          style: GoogleFonts.inter(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w500,
+                            color: AppTheme.brandPrimary,
+                          ),
+                        ),
+                        Icon(Icons.calendar_today, color: AppTheme.brandPrimary, size: 20),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            SizedBox(height: 16),
+            // End Date
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'End Date',
+                  style: GoogleFonts.inter(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.grey.shade700,
+                  ),
+                ),
+                SizedBox(height: 8),
+                InkWell(
+                  onTap: _selectEndDate,
+                  borderRadius: BorderRadius.circular(12),
+                  child: Container(
+                    padding: EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      border: Border.all(color: Colors.grey.shade300),
+                      borderRadius: BorderRadius.circular(12),
+                      color: Colors.grey.shade50,
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          _formatDate(_endDate),
+                          style: GoogleFonts.inter(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w500,
+                            color: AppTheme.brandPrimary,
+                          ),
+                        ),
+                        Icon(Icons.calendar_today, color: AppTheme.brandPrimary, size: 20),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            SizedBox(height: 24),
+            // Date range display
+            Container(
+              padding: EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: AppTheme.brandPrimary.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.info_outline, size: 18, color: AppTheme.brandPrimary),
+                  SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      '${_getDayCount()} days selected',
+                      style: GoogleFonts.inter(
+                        fontSize: 13,
+                        color: AppTheme.brandPrimary,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            SizedBox(height: 24),
+            // Action buttons
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: Text(
+                    'Cancel',
+                    style: GoogleFonts.inter(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.grey.shade700,
+                    ),
+                  ),
+                ),
+                SizedBox(width: 12),
+                ElevatedButton(
+                  onPressed: () {
+                    widget.onDateRangeSelected(_startDate, _endDate);
+                    Navigator.pop(context);
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppTheme.brandPrimary,
+                    foregroundColor: Colors.white,
+                    padding: EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                  child: Text(
+                    'Apply',
+                    style: GoogleFonts.inter(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  String _formatDate(DateTime date) {
+    final months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    return '${months[date.month - 1]} ${date.day}, ${date.year}';
+  }
+
+  int _getDayCount() {
+    return _endDate.difference(_startDate).inDays + 1;
   }
 }
