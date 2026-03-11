@@ -577,12 +577,12 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
     if (_selectedMarkerType == 'start' && _tripEvents.isNotEmpty) {
       final event = _tripEvents.first;
       title = 'Trip Start';
-      subtitle = DateFormat('MMM dd, yyyy HH:mm').format(event.eventUtcTime);
+      subtitle = DateFormat('MMM dd, yyyy HH:mm').format(event.utcTimestamp.toLocal());
       description = 'Location: ${event.latitude.toStringAsFixed(3)}, ${event.longitude.toStringAsFixed(3)}';
     } else if (_selectedMarkerType == 'end' && _tripEvents.isNotEmpty) {
       final event = _tripEvents.last;
       title = 'Trip End';
-      subtitle = DateFormat('MMM dd, yyyy HH:mm').format(event.eventUtcTime);
+      subtitle = DateFormat('MMM dd, yyyy HH:mm').format(event.utcTimestamp.toLocal());
       description = 'Location: ${event.latitude.toStringAsFixed(3)}, ${event.longitude.toStringAsFixed(3)}';
     }
 
