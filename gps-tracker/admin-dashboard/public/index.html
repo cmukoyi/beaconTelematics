@@ -225,17 +225,17 @@
                             <thead>
                                 <tr>
                                     <th>Email</th>
-                                    <th>Name</th>
+                                    <th>Full Name</th>
                                     <th>Verified</th>
                                     <th>Active</th>
-                                    <th>Admin</th>
-                                    <th>Registered</th>
+                                    <th>Role</th>
+                                    <th>Member Since</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 ${users.map(user => `
                                     <tr>
-                                        <td>${user.email}</td>
+                                        <td><strong>${user.email}</strong></td>
                                         <td>${user.first_name || ''} ${user.last_name || ''}</td>
                                         <td>${user.email_verified ? '<span style="color: #22c55e;">✓</span>' : '<span style="color: #ef4444;">✗</span>'}</td>
                                         <td>${user.is_active ? '<span style="color: #22c55e;">✓</span>' : '<span style="color: #ef4444;">✗</span>'}</td>

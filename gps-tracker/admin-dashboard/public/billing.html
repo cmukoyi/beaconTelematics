@@ -393,9 +393,9 @@
                 <table>
                     <thead>
                         <tr>
-                            <th>User</th>
                             <th>Email</th>
-                            <th>Tags</th>
+                            <th>Device Count</th>
+                            <th>IMEIs</th>
                             <th>Status</th>
                             <th>Member Since</th>
                             <th>Actions</th>
@@ -409,18 +409,21 @@
                 const statusClass = user.is_active ? 'active' : 'inactive';
                 const statusText = user.is_active ? 'Active' : 'Inactive';
                 
+                // Get all IMEIs for this user
+                const imeiList = user.tags && user.tags.length > 0 
+                    ? user.tags.map(t => t.imei).join(', ')
+                    : '-';
+                
                 html += `
                     <tr>
-                        <td>
-                            <div class="user-name">${escapeHtml(user.full_name)}</div>
-                        </td>
-                        <td class="user-email">${escapeHtml(user.email)}</td>
+                        <td class="user-email"><strong>${escapeHtml(user.email)}</strong></td>
                         <td><span class="tag-count">${user.tag_count}</span></td>
+                        <td class="imei-cell" style="font-size: 0.85rem;">${escapeHtml(imeiList)}</td>
                         <td><span class="status ${statusClass}">${statusText}</span></td>
                         <td class="date-cell">${memberSince}</td>
                         <td>
                             <button class="expand-btn" onclick="toggleUserTags('${user.id}')">
-                                View Tags
+                                View Details
                             </button>
                         </td>
                     </tr>
