@@ -599,7 +599,7 @@
 
                     <div class="control-item">
                         <label for="minDistance">📏 Min Distance (km)</label>
-                        <input type="search" id="minDistance" placeholder="0.1" value="0.1">
+                        <input type="search" id="minDistance" placeholder="0" value="0">
                     </div>
                 </div>
 
@@ -1093,7 +1093,7 @@
 
         function resetFilters() {
             document.getElementById('vehicleSelect').value = '';
-            document.getElementById('minDistance').value = '0.1';
+            document.getElementById('minDistance').value = '0';
             document.getElementById('tripsList').innerHTML = '';
             document.getElementById('filterStats').style.display = 'none';
             currentTrips = [];

@@ -17,6 +17,7 @@ import 'package:ble_tracker_app/models/poi_model.dart';
 import 'package:ble_tracker_app/models/trip_model.dart';
 import 'package:ble_tracker_app/screens/home_screen.dart';
 import 'package:ble_tracker_app/screens/alerts_screen.dart';
+import 'package:ble_tracker_app/screens/trip_detail_screen.dart';
 
 // App version
 const String APP_VERSION = '1.0.0';
@@ -2175,7 +2176,7 @@ Best regards''',
                   )
                 : _isLoadingTrips
                     ? Center(child: CircularProgressIndicator())
-                    : _trips.isEmpty
+                    : _getFilteredTrips().isEmpty
                         ? Center(
                             child: Column(
                               mainAxisAlignment: MainAxisAlignment.center,
@@ -2205,9 +2206,10 @@ Best regards''',
                             onRefresh: _loadTrips,
                             child: ListView.builder(
                               padding: EdgeInsets.all(16),
-                              itemCount: _trips.length,
+                              itemCount: _getFilteredTrips().length,
                               itemBuilder: (context, index) {
-                                return _buildTripCard(_trips[index]);
+                                final filteredTrips = _getFilteredTrips();
+                                return _buildTripCard(filteredTrips[index]);
                               },
                             ),
                           ),
@@ -3633,6 +3635,22 @@ View on $mapProvider to see the vehicle location.''';
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                // Date
+                Row(
+                  children: [
+                    Icon(Icons.calendar_today, size: 16, color: Colors.grey.shade600),
+                    SizedBox(width: 6),
+                    Text(
+                      trip.dateFormatted,
+                      style: GoogleFonts.inter(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.grey.shade800,
+                      ),
+                    ),
+                  ],
+                ),
+                SizedBox(height: 8),
                 // Time range
                 Row(
                   children: [
@@ -3773,7 +3791,7 @@ View on $mapProvider to see the vehicle location.''';
                   mainAxisAlignment: MainAxisAlignment.end,
                   children: [
                     Text(
-                      isSelected ? 'Showing route' : 'Tap to view route',
+                      'Tap to view route',
                       style: GoogleFonts.inter(
                         fontSize: 12,
                         fontWeight: FontWeight.w500,
@@ -3782,7 +3800,7 @@ View on $mapProvider to see the vehicle location.''';
                     ),
                     SizedBox(width: 4),
                     Icon(
-                      isSelected ? Icons.visibility : Icons.map,
+                      Icons.map,
                       size: 14,
                       color: AppTheme.brandPrimary,
                     ),
@@ -3794,6 +3812,13 @@ View on $mapProvider to see the vehicle location.''';
         ),
       ),
     );
+  }
+  
+  /// Filter out trips with distance 0km or no distance data
+  List<Trip> _getFilteredTrips() {
+    return _trips.where((trip) {
+      return trip.distance != null && trip.distance! > 0;
+    }).toList();
   }
   
   Future<void> _loadTrips() async {
@@ -3875,60 +3900,12 @@ View on $mapProvider to see the vehicle location.''';
   }
   
   Future<void> _showTripRoute(Trip trip) async {
-    // If clicking the same trip, clear route
-    if (_selectedTrip?.id == trip.id) {
-      setState(() {
-        _selectedTrip = null;
-        _selectedTripRoute = null;
-      });
-      _clearTripRoute();
-      // Switch to Assets tab to show map
-      setState(() {
-        _selectedIndex = 0;
-      });
-      return;
-    }
-    
-    // Load trip route
-    setState(() {
-      _selectedTrip = trip;
-    });
-    
-    try {
-      final events = await _locationService.getTripEvents(trip.id);
-      
-      if (mounted) {
-        setState(() {
-          _selectedTripRoute = events;
-        });
-        
-        // Draw route on map
-        _drawTripRoute(events);
-        
-        // Switch to Assets tab to show the map with route
-        setState(() {
-          _selectedIndex = 0;
-        });
-      }
-    } catch (e) {
-      _logger.error('Failed to load trip route: $e');
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Row(
-              children: [
-                Icon(Icons.error, color: Colors.white),
-                SizedBox(width: 12),
-                Expanded(child: Text('Failed to load route: $e')),
-              ],
-            ),
-            backgroundColor: Colors.red,
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          ),
-        );
-      }
-    }
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => TripDetailScreen(trip: trip),
+      ),
+    );
   }
   
   void _drawTripRoute(List<TripEvent> events) {
