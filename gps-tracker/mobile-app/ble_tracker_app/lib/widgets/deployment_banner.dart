@@ -53,11 +53,7 @@ class _DeploymentBannerState extends State<DeploymentBanner>
       position: _slideAnimation,
       child: StreamBuilder<bool>(
         stream: _deploymentMonitor.deploymentStateChanged,
-        initialValue: _deploymentMonitor.isDeploying,
-        builder: (context, snapshot) {
-          final isDeploying = snapshot.data ?? false;
-
-          if (!isDeploying) {
+          initialData: _deploymentMonitor.isDeploying,
             return SizedBox.shrink();
           }
 
