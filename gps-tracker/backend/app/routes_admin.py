@@ -470,13 +470,12 @@ async def delete_old_logs(
 
 
 # BILLING ENDPOINTS
-@router.get("/billing/summary", response_model=BillingDataResponse)
+@router.get("/billing/summary")
 async def get_billing_summary(
     request: Request,
-    db: Session = Depends(get_db),
-    date: Optional[datetime] = Query(None)
+    db: Session = Depends(get_db)
 ):
-    """Get billing summary (manager only)"""
+    """Get billing summary with user and device stats (manager only)"""
     admin = get_admin_from_request(request, db)
     
     if not check_role_permission(admin.role, "manager"):
@@ -485,23 +484,49 @@ async def get_billing_summary(
             detail="Requires manager or admin role"
         )
     
-    # If no date specified, use today
-    if date is None:
-        date = datetime.utcnow().date()
+    # Import User and BLETag models
+    from app.models import User, BLETag
     
-    # Normalize to start of day
-    from datetime import date as date_class
-    if isinstance(date, datetime):
-        date = date.date()
+    # Get total users
+    total_users = db.query(User).count()
     
-    query_date = datetime.combine(date, datetime.min.time())
+    # Get active users (users with at least one BLE tag/IMEI)
+    users_with_tags = db.query(User.id).join(BLETag).distinct().count()
+    active_users = users_with_tags
     
-    billing = db.query(BillingData).filter(BillingData.date >= query_date).order_by(BillingData.date.desc()).first()
+    # Get total devices (IMEIs)
+    total_imeis = db.query(BLETag).count()
     
-    if not billing:
-        raise HTTPException(status_code=404, detail="Billing data not found for this date")
+    # Get active devices by user
+    active_devices_by_user = {}
+    user_devices = db.query(User.id, BLETag.imei).join(BLETag).all()
     
-    return billing
+    for user_id, imei in user_devices:
+        user_id_str = str(user_id) if user_id else "unknown"
+        if user_id_str not in active_devices_by_user:
+            active_devices_by_user[user_id_str] = []
+        active_devices_by_user[user_id_str].append(imei)
+    
+    # Create IMEI to user mapping
+    imei_to_user = {}
+    for user_id, imei in user_devices:
+        imei_to_user[imei] = str(user_id) if user_id else "unknown"
+    
+    # Get user device count
+    user_device_count = {}
+    for user_id, imei in user_devices:
+        user_id_str = str(user_id) if user_id else "unknown"
+        user_device_count[user_id_str] = user_device_count.get(user_id_str, 0) + 1
+    
+    return {
+        "date": datetime.utcnow(),
+        "total_users": total_users,
+        "active_users": active_users,
+        "total_imeis": total_imeis,
+        "active_devices_by_user": active_devices_by_user,
+        "imei_to_user": imei_to_user,
+        "user_device_count": user_device_count
+    }
 
 
 @router.get("/billing/history")
