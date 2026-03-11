@@ -2,10 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_map/flutter_map.dart' as fmap;
 import 'package:latlong2/latlong.dart' as latlong;
+import 'package:intl/intl.dart';
 import 'package:ble_tracker_app/theme/app_theme.dart';
 import 'package:ble_tracker_app/services/location_service.dart';
 import 'package:ble_tracker_app/services/logger_service.dart';
 import 'package:ble_tracker_app/models/trip_model.dart';
+import 'package:ble_tracker_app/widgets/map_bubble.dart';
 
 class TripDetailScreen extends StatefulWidget {
   final Trip trip;
@@ -24,6 +26,10 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
   List<fmap.Marker> _tripMarkers = [];
   bool _isLoading = true;
   fmap.LatLngBounds? _routeBounds;
+  
+  // For showing location bubbles on marker tap
+  String? _selectedMarkerType; // 'start' or 'end'
+  Offset? _selectedMarkerPosition;
 
   @override
   void initState() {
@@ -87,22 +93,30 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
       point: latlong.LatLng(startEvent.latitude, startEvent.longitude),
       width: 40,
       height: 40,
-      child: Container(
-        decoration: BoxDecoration(
-          color: Colors.green,
-          shape: BoxShape.circle,
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.3),
-              blurRadius: 4,
-              offset: Offset(0, 2),
-            ),
-          ],
-        ),
-        child: Icon(
-          Icons.trip_origin,
-          color: Colors.white,
-          size: 24,
+      child: GestureDetector(
+        onTap: () {
+          setState(() {
+            _selectedMarkerType = 'start';
+            _selectedMarkerPosition = Offset(20, 20); // Center of marker
+          });
+        },
+        child: Container(
+          decoration: BoxDecoration(
+            color: Colors.green,
+            shape: BoxShape.circle,
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.3),
+                blurRadius: 4,
+                offset: Offset(0, 2),
+              ),
+            ],
+          ),
+          child: Icon(
+            Icons.trip_origin,
+            color: Colors.white,
+            size: 24,
+          ),
         ),
       ),
     );
@@ -113,22 +127,30 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
       point: latlong.LatLng(endEvent.latitude, endEvent.longitude),
       width: 40,
       height: 40,
-      child: Container(
-        decoration: BoxDecoration(
-          color: Colors.red,
-          shape: BoxShape.circle,
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.3),
-              blurRadius: 4,
-              offset: Offset(0, 2),
-            ),
-          ],
-        ),
-        child: Icon(
-          Icons.place,
-          color: Colors.white,
-          size: 24,
+      child: GestureDetector(
+        onTap: () {
+          setState(() {
+            _selectedMarkerType = 'end';
+            _selectedMarkerPosition = Offset(20, 20); // Center of marker
+          });
+        },
+        child: Container(
+          decoration: BoxDecoration(
+            color: Colors.red,
+            shape: BoxShape.circle,
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.3),
+                blurRadius: 4,
+                offset: Offset(0, 2),
+              ),
+            ],
+          ),
+          child: Icon(
+            Icons.place,
+            color: Colors.white,
+            size: 24,
+          ),
         ),
       ),
     );
@@ -230,25 +252,32 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
                             valueColor: AlwaysStoppedAnimation<Color>(AppTheme.brandPrimary),
                           ),
                         )
-                      : fmap.FlutterMap(
-                          options: fmap.MapOptions(
-                            initialCenter: _routeBounds != null
-                                ? latlong.LatLng(
-                                    (_routeBounds!.south + _routeBounds!.north) / 2,
-                                    (_routeBounds!.west + _routeBounds!.east) / 2,
-                                  )
-                                : (_tripEvents.isNotEmpty
-                                    ? latlong.LatLng(_tripEvents.first.latitude, _tripEvents.first.longitude)
-                                    : latlong.LatLng(0, 0)),
-                            initialZoom: _routeBounds != null ? 12.0 : 13.0,
-                          ),
+                      : Stack(
                           children: [
-                            fmap.TileLayer(
-                              urlTemplate: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
-                              subdomains: ['a', 'b', 'c'],
+                            fmap.FlutterMap(
+                              options: fmap.MapOptions(
+                                initialCenter: _routeBounds != null
+                                    ? latlong.LatLng(
+                                        (_routeBounds!.south + _routeBounds!.north) / 2,
+                                        (_routeBounds!.west + _routeBounds!.east) / 2,
+                                      )
+                                    : (_tripEvents.isNotEmpty
+                                        ? latlong.LatLng(_tripEvents.first.latitude, _tripEvents.first.longitude)
+                                        : latlong.LatLng(0, 0)),
+                                initialZoom: _routeBounds != null ? 12.0 : 13.0,
+                              ),
+                              children: [
+                                fmap.TileLayer(
+                                  urlTemplate: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+                                  subdomains: ['a', 'b', 'c'],
+                                ),
+                                fmap.PolylineLayer(polylines: _tripPolylines),
+                                fmap.MarkerLayer(markers: _tripMarkers),
+                              ],
                             ),
-                            fmap.PolylineLayer(polylines: _tripPolylines),
-                            fmap.MarkerLayer(markers: _tripMarkers),
+                            // Location bubble overlay
+                            if (_selectedMarkerType != null && _selectedMarkerPosition != null)
+                              _buildLocationBubble(),
                           ],
                         ),
                 ),
@@ -535,6 +564,124 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildLocationBubble() {
+    String title = '';
+    String? description;
+    String? subtitle;
+
+    if (_selectedMarkerType == 'start' && _tripEvents.isNotEmpty) {
+      final event = _tripEvents.first;
+      title = 'Trip Start';
+      subtitle = DateFormat('MMM dd, yyyy HH:mm').format(event.eventUtcTime);
+      description = 'Location: ${event.latitude.toStringAsFixed(3)}, ${event.longitude.toStringAsFixed(3)}';
+    } else if (_selectedMarkerType == 'end' && _tripEvents.isNotEmpty) {
+      final event = _tripEvents.last;
+      title = 'Trip End';
+      subtitle = DateFormat('MMM dd, yyyy HH:mm').format(event.eventUtcTime);
+      description = 'Location: ${event.latitude.toStringAsFixed(3)}, ${event.longitude.toStringAsFixed(3)}';
+    }
+
+    return Positioned(
+      left: 16,
+      top: 16,
+      child: GestureDetector(
+        onTap: () {}, // Prevent bubble from closing when tapping inside
+        child: Container(
+          constraints: BoxConstraints(maxWidth: 250),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(12),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.15),
+                blurRadius: 12,
+                offset: Offset(0, 4),
+              ),
+            ],
+            border: Border.all(
+              color: AppTheme.brandPrimary.withOpacity(0.2),
+              width: 1,
+            ),
+          ),
+          child: Stack(
+            children: [
+              Padding(
+                padding: EdgeInsets.all(12),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: GoogleFonts.inter(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                        color: AppTheme.brandPrimary,
+                      ),
+                    ),
+                    if (subtitle != null) ...[
+                      SizedBox(height: 4),
+                      Text(
+                        subtitle,
+                        style: GoogleFonts.inter(
+                          fontSize: 11,
+                          color: Colors.grey.shade600,
+                        ),
+                      ),
+                    ],
+                    if (description != null && description.isNotEmpty) ...[
+                      SizedBox(height: 8),
+                      Container(
+                        padding: EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: Colors.grey.shade50,
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Text(
+                          description,
+                          style: GoogleFonts.inter(
+                            fontSize: 11,
+                            color: Colors.grey.shade800,
+                          ),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              Positioned(
+                top: 4,
+                right: 4,
+                child: GestureDetector(
+                  onTap: () {
+                    setState(() {
+                      _selectedMarkerType = null;
+                      _selectedMarkerPosition = null;
+                    });
+                  },
+                  child: Container(
+                    padding: EdgeInsets.all(4),
+                    decoration: BoxDecoration(
+                      color: Colors.grey.shade200,
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(
+                      Icons.close,
+                      size: 14,
+                      color: Colors.grey.shade700,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
