@@ -18,12 +18,12 @@ class TripDetailScreen extends StatefulWidget {
 class _TripDetailScreenState extends State<TripDetailScreen> {
   final _locationService = LocationService();
   final _logger = LoggerService();
-  final fmap.MapController _mapController = fmap.MapController();
 
   List<TripEvent> _tripEvents = [];
   List<fmap.Polyline> _tripPolylines = [];
   List<fmap.Marker> _tripMarkers = [];
   bool _isLoading = true;
+  latlong.LatLngBounds? _routeBounds;
 
   @override
   void initState() {
@@ -167,10 +167,9 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
       latlong.LatLng(maxLat + latPadding, maxLng + lngPadding),
     );
 
-    _mapController.fitBounds(
-      bounds,
-      options: fmap.FitBoundsOptions(padding: EdgeInsets.all(100)),
-    );
+    setState(() {
+      _routeBounds = bounds;
+    });
   }
 
   @override
@@ -216,10 +215,16 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
                   : Container(
                       color: Colors.white,
                       child: fmap.FlutterMap(
-                        mapController: _mapController,
                         options: fmap.MapOptions(
-                          initialCenter: latlong.LatLng(_tripEvents.isNotEmpty ? _tripEvents.first.latitude : 0, _tripEvents.isNotEmpty ? _tripEvents.first.longitude : 0),
-                          initialZoom: 13.0,
+                          initialCenter: _routeBounds != null
+                              ? latlong.LatLng(
+                                  (_routeBounds!.south + _routeBounds!.north) / 2,
+                                  (_routeBounds!.west + _routeBounds!.east) / 2,
+                                )
+                              : (_tripEvents.isNotEmpty
+                                  ? latlong.LatLng(_tripEvents.first.latitude, _tripEvents.first.longitude)
+                                  : latlong.LatLng(0, 0)),
+                          initialZoom: _routeBounds != null ? 12.0 : 13.0,
                         ),
                         children: [
                           fmap.TileLayer(
