@@ -274,10 +274,20 @@ jobs:
             HEALTH=$(docker exec beacon_telematics_admin curl -s http://localhost:3000/health)
             echo "Response: $HEALTH"
             
-            # Test manifest endpoint
+            # Test manifest endpoint with error handling
             echo ""
             echo "Testing /api/manifest endpoint..."
-            docker exec beacon_telematics_admin curl -s http://localhost:3000/api/manifest | grep -o "trips.html" && echo "✅ trips.html found in manifest" || echo "❌ trips.html NOT in manifest!"
+            MANIFEST=$(docker exec beacon_telematics_admin curl -s http://localhost:3000/api/manifest)
+            
+            if echo "$MANIFEST" | grep -q "trips.html"; then
+              echo "✅ trips.html found in manifest"
+              echo "Manifest response:"
+              echo "$MANIFEST"
+            else
+              echo "⚠️  trips.html not found in manifest or endpoint returned error"
+              echo "Manifest response:"
+              echo "$MANIFEST"
+            fi
           SSHEOF
       
       - name: Browser-Accessible Verification
@@ -296,18 +306,35 @@ jobs:
           
           echo ""
           echo "Testing Health endpoint..."
-          curl -s http://$DO_SERVER_IP:3010/health | jq .
+          curl -s http://$DO_SERVER_IP:3010/health | jq . || {
+            echo "❌ Health endpoint returned invalid JSON"
+            curl -s http://$DO_SERVER_IP:3010/health
+            exit 1
+          }
           
           echo ""
           echo "Testing Manifest endpoint..."
-          curl -s http://$DO_SERVER_IP:3010/api/manifest | jq .files
+          MANIFEST_RESPONSE=$(curl -s http://$DO_SERVER_IP:3010/api/manifest)
+          
+          # Validate JSON first
+          if ! echo "$MANIFEST_RESPONSE" | jq . > /dev/null 2>&1; then
+            echo "❌ Manifest endpoint returned invalid JSON!"
+            echo "Response received:"
+            echo "$MANIFEST_RESPONSE"
+            exit 1
+          fi
+          
+          # Extract files array
+          echo "$MANIFEST_RESPONSE" | jq '.files'
           
           echo ""
           echo "Checking if trips.html appears in manifest..."
-          if curl -s http://$DO_SERVER_IP:3010/api/manifest | grep -q "trips.html"; then
+          if echo "$MANIFEST_RESPONSE" | jq '.files[] | select(.name == "trips.html")' | grep -q "trips.html"; then
             echo "✅ trips.html CONFIRMED in manifest!"
           else
             echo "❌ WARNING: trips.html not found in manifest"
+            echo "Available files:"
+            echo "$MANIFEST_RESPONSE" | jq '.files[].name'
           fi
       
       - name: Health Check
