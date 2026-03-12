@@ -237,7 +237,7 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
             ),
             // Map view with boundary
             Expanded(
-              flex: 4,
+              flex: 7,
               child: Container(
                 margin: EdgeInsets.all(12),
                 decoration: BoxDecoration(
@@ -335,7 +335,7 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
               color: Colors.white,
               child: SingleChildScrollView(
                 child: Padding(
-                  padding: EdgeInsets.all(16),
+                  padding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -354,7 +354,7 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
                           ),
                         ],
                       ),
-                      SizedBox(height: 8),
+                      SizedBox(height: 6),
                       // Start and end time
                       Row(
                         children: [
@@ -363,16 +363,16 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
                           Text(
                             '${widget.trip.startTimeFormatted} - ${widget.trip.endTimeFormatted}',
                             style: GoogleFonts.inter(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w600,
+                              fontSize: 13,
+                              fontWeight: FontWeight.w500,
                               color: Colors.grey.shade900,
                             ),
                           ),
                         ],
                       ),
-                      SizedBox(height: 12),
+                      SizedBox(height: 8),
                       Divider(color: Colors.grey.shade300, height: 1),
-                      SizedBox(height: 12),
+                      SizedBox(height: 8),
                       // Vehicle
                       Row(
                         children: [
@@ -409,75 +409,81 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
                           ),
                         ],
                       ),
-                      SizedBox(height: 12),
-                      // Distance
+                      SizedBox(height: 8),
+                      // Distance and Duration - Side by Side
                       Row(
                         children: [
-                          Container(
-                            padding: EdgeInsets.all(8),
-                            decoration: BoxDecoration(
-                              color: Colors.blue.shade50,
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: Icon(Icons.straighten, size: 18, color: Colors.blue.shade700),
-                          ),
-                          SizedBox(width: 12),
+                          // Distance
                           Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
+                            child: Row(
                               children: [
-                                Text(
-                                  'Distance',
-                                  style: GoogleFonts.inter(
-                                    fontSize: 12,
-                                    color: Colors.grey.shade600,
+                                Container(
+                                  padding: EdgeInsets.all(6),
+                                  decoration: BoxDecoration(
+                                    color: Colors.blue.shade50,
+                                    borderRadius: BorderRadius.circular(6),
                                   ),
+                                  child: Icon(Icons.straighten, size: 16, color: Colors.blue.shade700),
                                 ),
-                                Text(
-                                  widget.trip.formattedDistance,
-                                  style: GoogleFonts.inter(
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.w600,
-                                    color: Colors.blue.shade700,
+                                SizedBox(width: 8),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        'Distance',
+                                        style: GoogleFonts.inter(
+                                          fontSize: 11,
+                                          color: Colors.grey.shade600,
+                                        ),
+                                      ),
+                                      Text(
+                                        widget.trip.formattedDistance,
+                                        style: GoogleFonts.inter(
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.w600,
+                                          color: Colors.blue.shade700,
+                                        ),
+                                      ),
+                                    ],
                                   ),
                                 ),
                               ],
                             ),
                           ),
-                        ],
-                      ),
-                      SizedBox(height: 12),
-                      // Duration
-                      Row(
-                        children: [
-                          Container(
-                            padding: EdgeInsets.all(8),
-                            decoration: BoxDecoration(
-                              color: Colors.orange.shade50,
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: Icon(Icons.timer, size: 18, color: Colors.orange.shade700),
-                          ),
                           SizedBox(width: 12),
+                          // Duration
                           Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
+                            child: Row(
                               children: [
-                                Text(
-                                  'Duration',
-                                  style: GoogleFonts.inter(
-                                    fontSize: 12,
-                                    color: Colors.grey.shade600,
+                                Container(
+                                  padding: EdgeInsets.all(6),
+                                  decoration: BoxDecoration(
+                                    color: Colors.orange.shade50,
+                                    borderRadius: BorderRadius.circular(6),
                                   ),
+                                  child: Icon(Icons.timer, size: 16, color: Colors.orange.shade700),
                                 ),
-                                Text(
-                                  widget.trip.formattedDuration,
-                                  style: GoogleFonts.inter(
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.w600,
-                                    color: Colors.orange.shade700,
-                                  ),
-                                ),
+                                SizedBox(width: 8),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        'Duration',
+                                        style: GoogleFonts.inter(
+                                          fontSize: 11,
+                                          color: Colors.grey.shade600,
+                                        ),
+                                      ),
+                                      Text(
+                                        widget.trip.formattedDuration,
+                                        style: GoogleFonts.inter(
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.w600,
+                                          color: Colors.orange.shade700,
+                                        ),
+                                      ),
                               ],
                             ),
                           ),
