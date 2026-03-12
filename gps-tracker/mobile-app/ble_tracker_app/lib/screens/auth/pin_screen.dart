@@ -199,39 +199,46 @@ class _PinVerificationScreenState extends State<PinVerificationScreen> {
                   SizedBox(height: 40),
                   
                   // PIN Input
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                    children: List.generate(6, (index) {
-                      return SizedBox(
-                        width: 48,
-                        height: 56,
-                        child: TextField(
-                          controller: _controllers[index],
-                          focusNode: _focusNodes[index],
-                          textAlign: TextAlign.center,
-                          keyboardType: TextInputType.number,
-                          maxLength: 1,
-                          style: TextStyle(
-                            fontSize: 24,
-                            fontWeight: FontWeight.bold,
-                          ),
-                          decoration: InputDecoration(
-                            counterText: '',
-                            contentPadding: EdgeInsets.zero,
-                          ),
-                          inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                          onChanged: (value) {
-                            if (value.isNotEmpty && index < 5) {
-                              _focusNodes[index + 1].requestFocus();
-                            } else if (value.isEmpty && index > 0) {
-                              _focusNodes[index - 1].requestFocus();
-                            } else if (value.isNotEmpty && index == 5) {
-                              // Last digit entered
-                              _focusNodes[index].unfocus();
-                            }
-                          },
-                        ),
-                      );
+                  // Responsive PIN input boxes
+                  LayoutBuilder(
+                    builder: (context, constraints) {
+                      // Calculate box size based on available width
+                      final availableWidth = constraints.maxWidth - 20; // padding buffer
+                      final boxSize = (availableWidth / 6).clamp(40.0, 65.0); // Min 40, Max 65
+                      
+                      return Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                        children: List.generate(6, (index) {
+                          return SizedBox(
+                            width: boxSize,
+                            height: boxSize,
+                            child: TextField(
+                              controller: _controllers[index],
+                              focusNode: _focusNodes[index],
+                              textAlign: TextAlign.center,
+                              keyboardType: TextInputType.number,
+                              maxLength: 1,
+                              style: TextStyle(
+                                fontSize: boxSize * 0.5,
+                                fontWeight: FontWeight.bold,
+                              ),
+                              decoration: InputDecoration(
+                                counterText: '',
+                                contentPadding: EdgeInsets.zero,
+                              ),
+                              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                              onChanged: (value) {
+                                if (value.isNotEmpty && index < 5) {
+                                  _focusNodes[index + 1].requestFocus();
+                                } else if (value.isEmpty && index > 0) {
+                                  _focusNodes[index - 1].requestFocus();
+                                } else if (value.isNotEmpty && index == 5) {
+                                  // Last digit entered
+                                  _focusNodes[index].unfocus();
+                                }
+                              },
+                            ),
+                          );
                     }),
                   ),
                   SizedBox(height: 32),
