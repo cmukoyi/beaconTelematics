@@ -2159,24 +2159,16 @@ Best regards''',
                     ),
                   ),
                 SizedBox(height: 12),
-                // Date range selector
+                // Date range selector - simplified to 3 options for mobile
                 SingleChildScrollView(
                   scrollDirection: Axis.horizontal,
                   child: Row(
                     children: [
+                      _buildDateChip('Custom'),
+                      SizedBox(width: 8),
                       _buildDateChip('Today'),
                       SizedBox(width: 8),
                       _buildDateChip('Yesterday'),
-                      SizedBox(width: 8),
-                      _buildDateChip('This Week'),
-                      SizedBox(width: 8),
-                      _buildDateChip('Previous Week'),
-                      SizedBox(width: 8),
-                      _buildDateChip('This Month'),
-                      SizedBox(width: 8),
-                      _buildDateChip('Previous Month'),
-                      SizedBox(width: 8),
-                      _buildDateChip('Custom'),
                     ],
                   ),
                 ),
@@ -4106,18 +4098,6 @@ View on $mapProvider to see the vehicle location.''';
       switch (_selectedDateRange) {
         case 'Yesterday':
           dateRange = DateRange.yesterday();
-          break;
-        case 'This Week':
-          dateRange = DateRange.thisWeek();
-          break;
-        case 'Previous Week':
-          dateRange = DateRange.previousWeek();
-          break;
-        case 'This Month':
-          dateRange = DateRange.thisMonth();
-          break;
-        case 'Previous Month':
-          dateRange = DateRange.previousMonth();
           break;
         case 'Custom':
           if (_customStartDate != null && _customEndDate != null) {
