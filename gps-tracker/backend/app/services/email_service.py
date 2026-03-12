@@ -351,20 +351,14 @@ class EmailService:
                     <p style="font-size: 16px;">
                       You requested to reset your password for your Beacon Telematics account.
                     </p>
-                    <div style="text-align: center; margin: 30px 0;">
-                      <p style="background-color: #173C64; color: white; padding: 15px 40px; 
-                                border-radius: 5px; font-weight: bold; font-size: 16px; margin: 0;">
-                        <a href="{reset_link}" style="color: white; text-decoration: none;">Reset Password</a>
-                      </p>
-                    </div>
                     <p style="color: #666; font-size: 14px;">
-                      This link will expire in <strong>1 hour</strong>.
-                    </p>
-                    <p style="color: #666; font-size: 14px;">
-                      If the button doesn't work, copy and paste this link into your browser:
+                      Click the link below to reset your password:
                     </p>
                     <p style="background-color: #e8e8e8; padding: 10px; border-radius: 4px; word-break: break-all; font-size: 12px;">
                       {reset_link}
+                    </p>
+                    <p style="color: #666; font-size: 14px;">
+                      This link will expire in <strong>1 hour</strong>.
                     </p>
                     <hr style="border: none; border-top: 1px solid #ddd; margin: 30px 0;">
                     <p style="color: #999; font-size: 12px;">
