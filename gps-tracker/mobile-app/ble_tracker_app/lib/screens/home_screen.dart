@@ -193,7 +193,7 @@ class _HomeScreenState extends State<HomeScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('✅ Vehicle IMEI added successfully!'),
+            content: Text('IMEI added successfully'),
             backgroundColor: Colors.green,
           ),
         );
@@ -217,9 +217,16 @@ class _HomeScreenState extends State<HomeScreen> {
     } catch (e) {
       print('❌ HomeScreen: Error adding IMEI: $e');
       if (mounted) {
+        // Extract error message - prefer simple messages
+        String errorMsg = e.toString();
+        if (errorMsg.contains('IMEI not recognised')) {
+          errorMsg = 'IMEI not recognised';
+        } else if (errorMsg.contains('Exception: ')) {
+          errorMsg = errorMsg.replaceAll('Exception: ', '');
+        }
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Failed to add tag: ${e.toString()}'),
+            content: Text(errorMsg),
             backgroundColor: Colors.red,
           ),
         );

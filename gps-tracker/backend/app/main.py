@@ -812,7 +812,7 @@ def validate_imei(
             status_code=500,
             content={
                 "success": False,
-                "error": "Validation service timeout. Please try again."
+                "error": "IMEI not recognised"
             }
         )
     except requests.exceptions.RequestException as e:
@@ -822,7 +822,7 @@ def validate_imei(
             status_code=500,
             content={
                 "success": False,
-                "error": "Unable to validate IMEI. Please try again."
+                "error": "IMEI not recognised"
             }
         )
     except Exception as e:
@@ -1109,14 +1109,14 @@ def add_tag_compat(
                     print(f"❌ IMEI {tag_data.imei} not found in MProfiler")
                 return {
                     "success": False,
-                    "error": "IMEI not found in tracking system. Please check the IMEI and try again."
+                    "error": "IMEI not recognised"
                 }
             elif validation_response.status_code != 200:
                 if debug:
                     print(f"⚠️ IMEI validation returned status: {validation_response.status_code}")
                 return {
                     "success": False,
-                    "error": f"Unable to validate IMEI (status: {validation_response.status_code}). Please try again."
+                    "error": "IMEI not recognised"
                 }
             
             if debug:
@@ -1127,14 +1127,14 @@ def add_tag_compat(
                 print(f"⏱️ IMEI validation timeout for {tag_data.imei}")
             return {
                 "success": False,
-                "error": "Validation service timeout. Please try again."
+                "error": "IMEI not recognised"
             }
         except requests.exceptions.RequestException as e:
             if debug:
                 print(f"❌ IMEI validation error: {str(e)}")
             return {
                 "success": False,
-                "error": "Unable to validate IMEI. Please check your connection and try again."
+                "error": "IMEI not recognised"
             }
         
         # IMEI is valid, create new tag
@@ -1155,7 +1155,7 @@ def add_tag_compat(
         
         return {
             "success": True,
-            "message": "Tag added successfully",
+            "message": "IMEI added successfully",
             "tag": {
                 "id": str(ble_tag.id),
                 "imei": ble_tag.imei,
