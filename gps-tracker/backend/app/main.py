@@ -319,6 +319,31 @@ def api_health_check():
         "timestamp": datetime.utcnow().isoformat()
     }
 
+@app.get("/api/manifest")
+def manifest():
+    """Deployment manifest endpoint - lists API capabilities and version info"""
+    return {
+        "deployment": {
+            "timestamp": datetime.utcnow().isoformat(),
+            "version": "beacon-telematics-api",
+            "environment": os.getenv("NODE_ENV", "production")
+        },
+        "api": {
+            "version": "v1",
+            "endpoints": {
+                "health": "/api/health",
+                "manifest": "/api/manifest",
+                "auth": "/api/v1/auth",
+                "ble_tags": "/api/v1/ble-tags",
+                "tags": "/api/v1/tags",
+                "trips": "/api/trips",
+                "pois": "/api/v1/pois",
+                "alerts": "/api/v1/alerts"
+            }
+        },
+        "status": "operational"
+    }
+
 # Authentication endpoints
 @app.post("/api/v1/auth/register", response_model=Token)
 def register(user_data: UserCreate, db: Session = Depends(get_db)):
