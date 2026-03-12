@@ -20,13 +20,17 @@ class MapBubble extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Responsive width - adapt based on screen size
+    final screenWidth = MediaQuery.of(context).size.width;
+    final maxBubbleWidth = screenWidth < 360 ? screenWidth * 0.75 : 280.0;
+    
     return Positioned(
       left: position.dx,
       top: position.dy,
       child: GestureDetector(
         onTap: () {}, // Prevent closing when tapping inside bubble
         child: Container(
-          constraints: BoxConstraints(maxWidth: 280),
+          constraints: BoxConstraints(maxWidth: maxBubbleWidth),
           decoration: BoxDecoration(
             color: Colors.white,
             borderRadius: BorderRadius.circular(12),
