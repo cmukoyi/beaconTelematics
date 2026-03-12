@@ -5,7 +5,7 @@ class Trip {
   final String vehicleDescription;
   final String? driverDescription;
   final String? driverKeyCode;
-  final double? distance; // in km (will be converted to miles for display)
+  final double? distance; // in miles
   final int duration; // in seconds
   final DateTime startUtcTimestamp;
   final DateTime endUtcTimestamp;
@@ -73,12 +73,10 @@ class Trip {
     return '${minutes}m';
   }
   
-  /// Format distance with 2 decimal places (converted to miles)
+  /// Format distance with 2 decimal places (already in miles)
   String get formattedDistance {
     if (distance == null) return 'N/A';
-    // Convert km to miles (1 km = 0.621371 miles)
-    final miles = distance! * 0.621371;
-    return '${miles.toStringAsFixed(2)} mi';
+    return '${distance!.toStringAsFixed(2)} mi';
   }
   
   /// Get short time format (HH:mm)
