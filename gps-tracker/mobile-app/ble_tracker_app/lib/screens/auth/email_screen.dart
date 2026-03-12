@@ -161,9 +161,13 @@ class _EmailScreenState extends State<EmailScreen> {
         child: SafeArea(
           child: Center(
             child: SingleChildScrollView(
-              padding: const EdgeInsets.all(24.0),
+              padding: MediaQuery.of(context).size.width < 380
+                  ? const EdgeInsets.all(16.0) // Smaller padding on very small screens
+                  : const EdgeInsets.all(24.0),
               child: Container(
-                constraints: BoxConstraints(maxWidth: 400),
+                constraints: BoxConstraints(
+                  maxWidth: MediaQuery.of(context).size.width > 600 ? 400 : MediaQuery.of(context).size.width * 0.9,
+                ),
                 decoration: BoxDecoration(
                   color: Colors.white.withValues(alpha: 0.95),
                   borderRadius: BorderRadius.circular(32),
@@ -179,7 +183,9 @@ class _EmailScreenState extends State<EmailScreen> {
                     width: 1.5,
                   ),
                 ),
-                padding: const EdgeInsets.all(40.0),
+                padding: MediaQuery.of(context).size.width < 380
+                    ? const EdgeInsets.all(24.0)
+                    : const EdgeInsets.all(40.0),
                 child: Form(
                   key: _formKey,
                   child: Column(
@@ -288,8 +294,11 @@ class _EmailScreenState extends State<EmailScreen> {
                               fontSize: 16,
                               fontWeight: FontWeight.w500,
                             ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                             decoration: InputDecoration(
                               hintText: 'you@example.com',
+                              hintMaxLines: 1,
                               hintStyle: GoogleFonts.inter(
                                 color: Colors.grey.shade400,
                               ),
@@ -334,7 +343,7 @@ class _EmailScreenState extends State<EmailScreen> {
                         .slideY(begin: 0.2, end: 0, delay: 400.ms, duration: 600.ms),
                       SizedBox(height: 32),
                       
-                      // Send Button with animation
+                      // Send Button with animation - Responsive
                       SizedBox(
                         width: double.infinity,
                         height: 60,
@@ -359,20 +368,26 @@ class _EmailScreenState extends State<EmailScreen> {
                                     strokeWidth: 3,
                                   ),
                                 )
-                              : Row(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    Icon(Icons.send_rounded, size: 22),
-                                    SizedBox(width: 12),
-                                    Text(
-                                      'Send Verification Code',
-                                      style: GoogleFonts.inter(
-                                        fontSize: 16,
-                                        fontWeight: FontWeight.w600,
-                                        letterSpacing: 0.5,
+                              : SingleChildScrollView(
+                                  scrollDirection: Axis.horizontal,
+                                  child: Row(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(Icons.send_rounded, size: 20),
+                                      SizedBox(width: 8),
+                                      Text(
+                                        'Send Verification Code',
+                                        style: GoogleFonts.inter(
+                                          fontSize: 15,
+                                          fontWeight: FontWeight.w600,
+                                          letterSpacing: 0.3,
+                                        ),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
                                       ),
-                                    ),
-                                  ],
+                                    ],
+                                  ),
                                 ),
                         ),
                       ).animate()
