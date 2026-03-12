@@ -1237,6 +1237,84 @@ def remove_tag_compat(
         }
 
 
+@app.put("/api/tags/{imei}/attributes")
+def update_tag_attributes(
+    imei: str,
+    attributes_data: dict,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Update custom attributes for a BLE tag (includes show_on_map visibility settings)"""
+    import os
+    debug = os.getenv('DEBUG', 'False').lower() == 'true'
+    
+    try:
+        if debug:
+            print(f"\n{'='*60}")
+            print(f"📝 Updating attributes for IMEI: {imei}")
+            print(f"👤 User: {current_user.email}")
+            print(f"📦 Attributes: {attributes_data}")
+        
+        # Find the tag
+        tag = db.query(BLETag).filter(
+            BLETag.user_id == current_user.id,
+            BLETag.imei == imei
+        ).first()
+        
+        if not tag:
+            if debug:
+                print(f"❌ Tag not found for IMEI: {imei}")
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Tag not found"
+            )
+        
+        # Extract attributes from request (has "attributes" key)
+        attrs = attributes_data.get('attributes', {})
+        
+        # Validate structure - each attribute should have value and show_on_map
+        for attr_name, attr_value in attrs.items():
+            if not isinstance(attr_value, dict):
+                if debug:
+                    print(f"❌ Invalid attribute format for {attr_name}: {attr_value}")
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Attribute '{attr_name}' must be an object with 'value' and 'show_on_map' fields"
+                )
+            
+            # Ensure required fields
+            if 'value' not in attr_value:
+                attr_value['value'] = None
+            if 'show_on_map' not in attr_value:
+                attr_value['show_on_map'] = False
+        
+        # Update tag attributes
+        tag.attributes = attrs
+        db.commit()
+        
+        if debug:
+            print(f"✅ Attributes updated successfully")
+            print(f"💾 Saved to database: {tag.attributes}")
+            print(f"{'='*60}\n")
+        
+        return {
+            "success": True,
+            "message": "Attributes saved successfully",
+            "attributes": tag.attributes
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        if debug:
+            print(f"❌ Error updating attributes: {str(e)}")
+            print(f"{'='*60}\n")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to save attributes: {str(e)}"
+        )
+
+
 @app.post("/api/vehicles")
 def get_vehicles(
     current_user: User = Depends(get_current_user),
