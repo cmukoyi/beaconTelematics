@@ -214,7 +214,7 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
                   ),
                   Expanded(
                     child: Text(
-                      'Trip Details',
+                      'Journey Details',
                       style: GoogleFonts.poppins(
                         fontSize: 20,
                         fontWeight: FontWeight.w700,
@@ -586,13 +586,17 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
       description = 'Location: ${event.latitude.toStringAsFixed(3)}, ${event.longitude.toStringAsFixed(3)}';
     }
 
+    // Responsive width - adapt based on screen size
+    final screenWidth = MediaQuery.of(context).size.width;
+    final maxBubbleWidth = screenWidth < 360 ? screenWidth * 0.7 : 250.0;
+
     return Positioned(
       left: 16,
       top: 16,
       child: GestureDetector(
         onTap: () {}, // Prevent bubble from closing when tapping inside
         child: Container(
-          constraints: BoxConstraints(maxWidth: 250),
+          constraints: BoxConstraints(maxWidth: maxBubbleWidth),
           decoration: BoxDecoration(
             color: Colors.white,
             borderRadius: BorderRadius.circular(12),
