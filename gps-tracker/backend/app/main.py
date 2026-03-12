@@ -1191,7 +1191,8 @@ def list_tags_compat(
                     "imei": tag.imei,
                     "added_date": tag.added_at.isoformat(),
                     "device_name": tag.device_name,
-                    "description": tag.description
+                    "description": tag.description,
+                    "attributes": tag.attributes or {}
                 }
                 for tag in tags
             ]
