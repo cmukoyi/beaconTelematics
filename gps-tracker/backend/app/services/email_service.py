@@ -352,12 +352,10 @@ class EmailService:
                       You requested to reset your password for your Beacon Telematics account.
                     </p>
                     <div style="text-align: center; margin: 30px 0;">
-                      <a href="{reset_link}" 
-                         style="display: inline-block; background-color: #173C64; color: white; 
-                                padding: 15px 40px; text-decoration: none; border-radius: 5px; 
-                                font-weight: bold; font-size: 16px;">
-                        Reset Password
-                      </a>
+                      <p style="background-color: #173C64; color: white; padding: 15px 40px; 
+                                border-radius: 5px; font-weight: bold; font-size: 16px; margin: 0;">
+                        <a href="{reset_link}" style="color: white; text-decoration: none;">Reset Password</a>
+                      </p>
                     </div>
                     <p style="color: #666; font-size: 14px;">
                       This link will expire in <strong>1 hour</strong>.
