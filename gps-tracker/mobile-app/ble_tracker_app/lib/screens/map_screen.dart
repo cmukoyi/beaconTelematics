@@ -1088,6 +1088,28 @@ Best regards''',
     });
   }
 
+  /// Share vehicle location via Share dialog
+  void _shareVehicleLocation(Vehicle vehicle) async {
+    final location = vehicle.lastKnownPosition;
+    if (location == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('No location available to share'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+    
+    final vehicleName = _vehicleCustomNames[vehicle.id] ?? vehicle.description;
+    final shareText = 'Location: $vehicleName\n' +
+      'Latitude: ${location.latitude.toStringAsFixed(6)}\n' +
+      'Longitude: ${location.longitude.toStringAsFixed(6)}\n' +
+      'Time: ${location.timestampFormatted}';
+    
+    await Share.share(shareText);
+  }
+
   void _hideVehicleDetails() {
     setState(() {
       _selectedVehicle = null;
@@ -1248,8 +1270,8 @@ Best regards''',
   Widget _buildVehiclePopup(Vehicle vehicle) {
     final location = vehicle.lastKnownPosition;
     return Container(
-      margin: EdgeInsets.all(12),
-      constraints: BoxConstraints(maxWidth: 280, maxHeight: 260),
+      margin: EdgeInsets.all(8),
+      constraints: BoxConstraints(maxWidth: 260, maxHeight: 220),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(12),
@@ -1266,7 +1288,7 @@ Best regards''',
         children: [
           // Header with close button
           Container(
-            padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            padding: EdgeInsets.symmetric(horizontal: 10, vertical: 6),
             decoration: BoxDecoration(
               color: AppTheme.brandPrimary.withOpacity(0.08),
               borderRadius: BorderRadius.vertical(top: Radius.circular(12)),
@@ -1309,7 +1331,7 @@ Best regards''',
           Expanded(
             child: SingleChildScrollView(
               child: Container(
-                padding: EdgeInsets.all(10),
+                padding: EdgeInsets.all(8),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -1346,7 +1368,7 @@ Best regards''',
           ),
           // Action buttons - Fixed at bottom
           Container(
-            padding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+            padding: EdgeInsets.symmetric(horizontal: 6, vertical: 6),
             decoration: BoxDecoration(
               border: Border(top: BorderSide(color: Colors.grey.shade200)),
             ),
@@ -1377,10 +1399,10 @@ Best regards''',
                     child: OutlinedButton.icon(
                       onPressed: () {
                         _hideVehicleDetails();
-                        _showEditNameDialog(vehicle);
+                        _shareVehicleLocation(vehicle);
                       },
-                      icon: Icon(Icons.edit, size: 13),
-                      label: Text('Edit', style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.w500)),
+                      icon: Icon(Icons.share, size: 13),
+                      label: Text('Share', style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.w500)),
                       style: OutlinedButton.styleFrom(
                         padding: EdgeInsets.symmetric(horizontal: 6),
                       ),
