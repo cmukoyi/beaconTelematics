@@ -26,10 +26,10 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
   List<fmap.Marker> _tripMarkers = [];
   bool _isLoading = true;
   fmap.LatLngBounds? _routeBounds;
-  
+
   // Map controller for zoom controls
   late fmap.MapController _mapController;
-  
+
   // For showing location bubbles on marker tap
   String? _selectedMarkerType; // 'start' or 'end'
   Offset? _selectedMarkerPosition;
@@ -107,7 +107,7 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
         onTap: () {
           setState(() {
             _selectedMarkerType = 'start';
-            _selectedMarkerPosition = Offset(20, 20); // Center of marker
+            _selectedMarkerPosition = Offset(20, 20);
           });
         },
         child: Container(
@@ -141,7 +141,7 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
         onTap: () {
           setState(() {
             _selectedMarkerType = 'end';
-            _selectedMarkerPosition = Offset(20, 20); // Center of marker
+            _selectedMarkerPosition = Offset(20, 20);
           });
         },
         child: Container(
@@ -177,7 +177,6 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
   void _zoomToRoute(List<latlong.LatLng> points) {
     if (points.isEmpty) return;
 
-    // Calculate bounds
     double minLat = points.first.latitude;
     double maxLat = points.first.latitude;
     double minLng = points.first.longitude;
@@ -190,7 +189,6 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
       if (point.longitude > maxLng) maxLng = point.longitude;
     }
 
-    // Add padding
     final latPadding = (maxLat - minLat) * 0.15;
     final lngPadding = (maxLng - minLng) * 0.15;
 
@@ -211,7 +209,7 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
       body: SafeArea(
         child: Column(
           children: [
-            // Header with back button
+            // Header
             Container(
               color: Colors.white,
               padding: EdgeInsets.all(16),
@@ -235,7 +233,7 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
                 ],
               ),
             ),
-            // Map view with boundary
+            // Map view
             Expanded(
               flex: 7,
               child: Container(
@@ -286,10 +284,8 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
                                 fmap.MarkerLayer(markers: _tripMarkers),
                               ],
                             ),
-                            // Location bubble overlay
                             if (_selectedMarkerType != null && _selectedMarkerPosition != null)
                               _buildLocationBubble(),
-                            // Zoom controls
                             Positioned(
                               right: 12,
                               bottom: 12,
@@ -339,7 +335,7 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // Trip date and time
+                      // Date
                       Row(
                         children: [
                           Icon(Icons.calendar_today, size: 16, color: Colors.grey.shade600),
@@ -355,7 +351,7 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
                         ],
                       ),
                       SizedBox(height: 6),
-                      // Start and end time
+                      // Time
                       Row(
                         children: [
                           Icon(Icons.access_time, size: 16, color: Colors.grey.shade600),
@@ -410,10 +406,9 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
                         ],
                       ),
                       SizedBox(height: 8),
-                      // Distance and Duration - Side by Side
+                      // Distance and Duration
                       Row(
                         children: [
-                          // Distance
                           Expanded(
                             child: Row(
                               children: [
@@ -452,7 +447,6 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
                             ),
                           ),
                           SizedBox(width: 12),
-                          // Duration
                           Expanded(
                             child: Row(
                               children: [
@@ -614,15 +608,15 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
                           ],
                         ),
                       ],
-
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
+                    ],       // closes Column children
+                  ),         // closes Column
+                ),           // closes Padding
+              ),             // closes SingleChildScrollView
+            ),               // closes Container (trip info box)
+          ],                 // closes outer Column children
+        ),                   // closes Column
+      ),                     // closes SafeArea
+    );                       // closes Scaffold
   }
 
   Widget _buildLocationBubble() {
@@ -642,7 +636,6 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
       description = 'Location: ${event.latitude.toStringAsFixed(3)}, ${event.longitude.toStringAsFixed(3)}';
     }
 
-    // Responsive width - adapt based on screen size
     final screenWidth = MediaQuery.of(context).size.width;
     final maxBubbleWidth = screenWidth < 360 ? screenWidth * 0.7 : 250.0;
 
@@ -650,7 +643,7 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
       left: 16,
       top: 16,
       child: GestureDetector(
-        onTap: () {}, // Prevent bubble from closing when tapping inside
+        onTap: () {},
         child: Container(
           constraints: BoxConstraints(maxWidth: maxBubbleWidth),
           decoration: BoxDecoration(
