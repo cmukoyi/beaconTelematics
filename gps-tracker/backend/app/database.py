@@ -1,4 +1,4 @@
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, inspect
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 import os
@@ -19,5 +19,14 @@ def get_db():
         db.close()
 
 def init_db():
-    """Initialize database tables"""
+    """Initialize database tables - skip if tables already exist (e.g., from backup restore)"""
+    inspector = inspect(engine)
+    existing_tables = inspector.get_table_names()
+    
+    # If tables already exist, database is already initialized
+    if existing_tables:
+        print(f"Database already initialized with {len(existing_tables)} tables. Skipping init_db().")
+        return
+    
+    # Create tables only if database is empty
     Base.metadata.create_all(bind=engine)
