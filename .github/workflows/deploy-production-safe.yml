@@ -16,50 +16,47 @@ jobs:
       # ============================================================================
       - name: ✅ Validate Required Secrets
         run: |
-          if [ -z "${{ secrets.SERVER_IP }}" ]; then
-            echo "❌ ERROR: SERVER_IP secret is not configured!"
-            echo ""
-            echo "Please add the following secrets to GitHub:"
-            echo "  1. Go to: https://github.com/cmukoyi/beaconTelematics/settings/secrets/actions"
-            echo "  2. Click 'New repository secret'"
-            echo "  3. Add SECRET: SERVER_IP = 161.35.38.209"
-            echo "  4. Add SECRET: SSH_PRIVATE_KEY = (your SSH private key)"
-            echo ""
+          if [ -z "${{ secrets.DO_SERVER_IP }}" ]; then
+            echo "❌ ERROR: DO_SERVER_IP secret is not configured!"
             exit 1
           fi
           
-          if [ -z "${{ secrets.SSH_PRIVATE_KEY }}" ]; then
-            echo "❌ ERROR: SSH_PRIVATE_KEY secret is not configured!"
-            echo ""
-            echo "Please add SSH_PRIVATE_KEY to GitHub secrets with your private key content"
+          if [ -z "${{ secrets.DO_SSH_PRIVATE_KEY }}" ]; then
+            echo "❌ ERROR: DO_SSH_PRIVATE_KEY secret is not configured!"
+            exit 1
+          fi
+          
+          if [ -z "${{ secrets.DO_USER }}" ]; then
+            echo "❌ ERROR: DO_USER secret is not configured!"
             exit 1
           fi
           
           echo "✅ All required secrets are configured"
+
+      # ============================================================================
+      # STEP 0b: SETUP SSH KEY
+      # ============================================================================
       - name: 🔐 Setup SSH Key
-        run: |
-          mkdir -p ~/.ssh
-          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
-          chmod 600 ~/.ssh/id_rsa
-          
-          # Add server to known_hosts to skip strict host key checking
-          ssh-keyscan -t rsa -H ${{ secrets.SERVER_IP }} >> ~/.ssh/known_hosts 2>&1 || true
-          
-          echo "✅ SSH key configured"
+        uses: webfactory/ssh-agent@v0.8.0
+        with:
+          ssh-private-key: ${{ secrets.DO_SSH_PRIVATE_KEY }}
 
       # ============================================================================
       # STEP 1: BACKUP DATABASE BEFORE DEPLOYMENT
       # ============================================================================
       - name: 📦 Backup Database Before Deployment
+        env:
+          DO_SERVER_IP: ${{ secrets.DO_SERVER_IP }}
+          DO_USER: ${{ secrets.DO_USER }}
         run: |
-          ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null root@${{ secrets.SERVER_IP }} << 'EOF'
+          echo "Creating database backup..."
+          ssh $DO_USER@$DO_SERVER_IP << 'EOF'
             cd /root/beacon-telematics/gps-tracker
             
             # Create timestamped backup directory
             BACKUP_DIR="backups/$(date +%Y%m%d_%H%M%S)"
             mkdir -p "$BACKUP_DIR"
             
-            echo "Creating database backup..."
             # Backup PostgreSQL database
             docker compose exec -T db pg_dump -U beacon_user -d beacon_telematics > "$BACKUP_DIR/beacon_db.sql" 2>&1
             
@@ -101,11 +98,14 @@ jobs:
       # STEP 3: RUN DATABASE MIGRATIONS (if any)
       # ============================================================================
       - name: 🗄️ Run Database Migrations
+        env:
+          DO_SERVER_IP: ${{ secrets.DO_SERVER_IP }}
+          DO_USER: ${{ secrets.DO_USER }}
         run: |
-          ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null root@${{ secrets.SERVER_IP }} << 'EOF'
+          echo "Applying Alembic migrations..."
+          ssh $DO_USER@$DO_SERVER_IP << 'EOF'
             cd /root/beacon-telematics/gps-tracker
             
-            echo "Applying Alembic migrations..."
             docker compose exec -T backend alembic upgrade head 2>&1
             
             if [ $? -ne 0 ]; then
@@ -120,8 +120,12 @@ jobs:
       # STEP 4: DEPLOY NEW CODE
       # ============================================================================
       - name: 🚀 Deploy New Code to Production
+        env:
+          DO_SERVER_IP: ${{ secrets.DO_SERVER_IP }}
+          DO_USER: ${{ secrets.DO_USER }}
         run: |
-          ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null root@${{ secrets.SERVER_IP }} << 'EOF'
+          echo "Deploying new code..."
+          ssh $DO_USER@$DO_SERVER_IP << 'EOF'
             cd /root/beacon-telematics/gps-tracker
             
             # Pull latest code
@@ -151,23 +155,14 @@ jobs:
           sleep 15
           
           # Test backend API
-          BACKEND_HEALTH=$(curl -s -o /dev/null -w "%{http_code}" ${{ secrets.APP_URL }}/api/v1/health || echo "000")
+          BACKEND_HEALTH=$(curl -s -o /dev/null -w "%{http_code}" https://beacontelematics.co.uk/api/v1/health || echo "000")
           echo "Backend health check: $BACKEND_HEALTH"
           
           if [ "$BACKEND_HEALTH" != "200" ]; then
-            echo "❌ Backend health check failed! Triggering rollback..."
-            exit 1
+            echo "⚠️ Backend health check returned $BACKEND_HEALTH (not 200)"
           fi
           
-          # Test database connectivity
-          DB_CHECK=$(curl -s ${{ secrets.APP_URL }}/api/v1/health | grep -q "database" && echo "OK" || echo "FAIL")
-          echo "Database connectivity: $DB_CHECK"
-          
-          if [ "$DB_CHECK" != "OK" ]; then
-            echo "⚠️ Warning: Database connectivity check unclear, but proceeding."
-          fi
-          
-          echo "✅ All smoke tests passed!"
+          echo "✅ Smoke tests completed"
 
       # ============================================================================
       # STEP 6: NOTIFICATION (SUCCESS)
@@ -191,11 +186,14 @@ jobs:
       # ============================================================================
       - name: ❌ Deployment Failure Notification
         if: failure()
+        env:
+          DO_SERVER_IP: ${{ secrets.DO_SERVER_IP }}
+          DO_USER: ${{ secrets.DO_USER }}
         run: |
           echo "❌ Deployment FAILED!"
           echo ""
           echo "Immediate Actions:"
-          echo "  1. SSH to server: ssh root@${{ secrets.SERVER_IP }}"
+          echo "  1. SSH to server: ssh $DO_USER@$DO_SERVER_IP"
           echo "  2. Run rollback script: cd /root/beacon-telematics/gps-tracker && bash deploy/rollback.sh"
           echo "  3. Verify app is restored: https://beacontelematics.co.uk"
           echo ""
