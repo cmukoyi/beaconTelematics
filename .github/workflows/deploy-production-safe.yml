@@ -12,27 +12,75 @@ jobs:
     
     steps:
       # ============================================================================
+      # STEP 0a: VALIDATE SECRETS ARE CONFIGURED
+      # ============================================================================
+      - name: ✅ Validate Required Secrets
+        run: |
+          if [ -z "${{ secrets.SERVER_IP }}" ]; then
+            echo "❌ ERROR: SERVER_IP secret is not configured!"
+            echo ""
+            echo "Please add the following secrets to GitHub:"
+            echo "  1. Go to: https://github.com/cmukoyi/beaconTelematics/settings/secrets/actions"
+            echo "  2. Click 'New repository secret'"
+            echo "  3. Add SECRET: SERVER_IP = 161.35.38.209"
+            echo "  4. Add SECRET: SSH_PRIVATE_KEY = (your SSH private key)"
+            echo ""
+            exit 1
+          fi
+          
+          if [ -z "${{ secrets.SSH_PRIVATE_KEY }}" ]; then
+            echo "❌ ERROR: SSH_PRIVATE_KEY secret is not configured!"
+            echo ""
+            echo "Please add SSH_PRIVATE_KEY to GitHub secrets with your private key content"
+            exit 1
+          fi
+          
+          echo "✅ All required secrets are configured"
+      - name: 🔐 Setup SSH Key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          
+          # Add server to known_hosts to skip strict host key checking
+          ssh-keyscan -t rsa -H ${{ secrets.SERVER_IP }} >> ~/.ssh/known_hosts 2>&1 || true
+          
+          echo "✅ SSH key configured"
+
+      # ============================================================================
       # STEP 1: BACKUP DATABASE BEFORE DEPLOYMENT
       # ============================================================================
       - name: 📦 Backup Database Before Deployment
         run: |
-          ssh -o StrictHostKeyChecking=no root@${{ secrets.SERVER_IP }} << 'EOF'
+          ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null root@${{ secrets.SERVER_IP }} << 'EOF'
             cd /root/beacon-telematics/gps-tracker
             
             # Create timestamped backup directory
             BACKUP_DIR="backups/$(date +%Y%m%d_%H%M%S)"
             mkdir -p "$BACKUP_DIR"
             
+            echo "Creating database backup..."
             # Backup PostgreSQL database
-            docker compose exec -T db pg_dump -U beacon_user -d beacon_telematics > "$BACKUP_DIR/beacon_db.sql"
+            docker compose exec -T db pg_dump -U beacon_user -d beacon_telematics > "$BACKUP_DIR/beacon_db.sql" 2>&1
             
-            # Backup Docker volumes (optional, for extra safety)
-            echo "Database backup created: $BACKUP_DIR/beacon_db.sql"
+            if [ $? -eq 0 ]; then
+              BACKUP_SIZE=$(du -h "$BACKUP_DIR/beacon_db.sql" | cut -f1)
+              echo "✅ Database backup created: $BACKUP_DIR/beacon_db.sql ($BACKUP_SIZE)"
+            else
+              echo "❌ Backup failed!"
+              exit 1
+            fi
             
             # Keep only last 10 backups to save space
-            ls -t backups/ | tail -n +11 | xargs rm -rf
+            echo "Cleaning old backups (keeping last 10)..."
+            BACKUP_COUNT=$(ls -d backups/*/ 2>/dev/null | wc -l)
+            if [ $BACKUP_COUNT -gt 10 ]; then
+              ls -t -d backups/*/ | tail -n +11 | xargs rm -rf
+              echo "✅ Removed old backups"
+            fi
             
-            echo "Backup directory: $BACKUP_DIR"
+            echo "Current backups:"
+            ls -lh backups/ | grep "^d"
           EOF
 
       # ============================================================================
@@ -54,14 +102,14 @@ jobs:
       # ============================================================================
       - name: 🗄️ Run Database Migrations
         run: |
-          ssh -o StrictHostKeyChecking=no root@${{ secrets.SERVER_IP }} << 'EOF'
+          ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null root@${{ secrets.SERVER_IP }} << 'EOF'
             cd /root/beacon-telematics/gps-tracker
             
             echo "Applying Alembic migrations..."
-            docker compose exec -T backend alembic upgrade head
+            docker compose exec -T backend alembic upgrade head 2>&1
             
             if [ $? -ne 0 ]; then
-              echo "❌ Migration failed! Rollback required."
+              echo "❌ Migration failed! Rollback may be required."
               exit 1
             fi
             
@@ -73,23 +121,23 @@ jobs:
       # ============================================================================
       - name: 🚀 Deploy New Code to Production
         run: |
-          ssh -o StrictHostKeyChecking=no root@${{ secrets.SERVER_IP }} << 'EOF'
+          ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null root@${{ secrets.SERVER_IP }} << 'EOF'
             cd /root/beacon-telematics/gps-tracker
             
             # Pull latest code
             echo "Pulling latest code from main branch..."
-            git pull origin main
+            git pull origin main 2>&1
             
             # Rebuild containers with new code
             echo "Rebuilding containers..."
-            docker compose build --no-cache backend admin-portal customer flutter-web
+            docker compose build --no-cache backend admin-portal customer flutter-web 2>&1
             
             # Restart all services
             echo "Restarting services..."
-            docker compose down && docker compose up -d
+            docker compose down && docker compose up -d 2>&1
             
             # Wait for services to be ready
-            sleep 10
+            sleep 15
             
             echo "✅ Deployment completed"
           EOF
