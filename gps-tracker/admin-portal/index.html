@@ -54,10 +54,17 @@
         }
 
         .login-logo {
-            font-size: 32px;
-            font-weight: 700;
-            color: var(--primary);
             margin-bottom: 12px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .logo-image {
+            height: 80px;
+            width: auto;
+            max-width: 200px;
+            object-fit: contain;
         }
 
         .login-title {
@@ -682,7 +689,9 @@
     <div id="loginPage" class="login-container" style="display: flex;">
         <div class="login-box">
             <div class="login-header">
-                <div class="login-logo">🚀 BT</div>
+                <div class="login-logo">
+                    <img src="assets/logo.png" alt="BeaconTelematics Logo" class="logo-image">
+                </div>
                 <h1 class="login-title">Admin Portal</h1>
                 <p class="login-subtitle">BeaconTelematics Management</p>
             </div>
