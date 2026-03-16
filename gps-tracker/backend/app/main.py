@@ -427,8 +427,8 @@ def send_verification_code(request: SendVerificationCodeRequest, db: Session = D
     # Check if user exists
     user = db.query(User).filter(User.email == request.email).first()
     
-    # If user exists and already has a password, they're fully registered
-    if user and user.hashed_password is not None:
+    # If user exists and already registered (has password) OR email is verified
+    if user and (user.hashed_password is not None or user.email_verified):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Email already registered. Please sign in instead."
