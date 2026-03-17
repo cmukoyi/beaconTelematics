@@ -30,14 +30,19 @@ class _AlertsScreenState extends State<AlertsScreen> {
   // Filter alerts to only show last 7 days
   List<GeofenceAlert> get _filteredAlerts {
     final sevenDaysAgo = DateTime.now().subtract(Duration(days: _daysToShow));
-    return _alerts.where((alert) {
+    final filtered = _alerts.where((alert) {
       return alert.createdAt.isAfter(sevenDaysAgo);
     }).toList();
+    if (_alerts.isNotEmpty && filtered.length != _alerts.length) {
+      print('⏰ Filtering to last $_daysToShow days: $_alerts.length total → ${filtered.length} recent');
+    }
+    return filtered;
   }
 
   @override
   void initState() {
     super.initState();
+    print('🔄 AlertsScreen initialized - 7 day filter v1.0');
     _loadAlerts();
     _scrollController.addListener(_onScroll);
   }
@@ -88,6 +93,8 @@ class _AlertsScreenState extends State<AlertsScreen> {
         _total = response.total;
         _hasMore = _alerts.length < _total;
         _loading = false;
+        print('📋 Loaded ${_alerts.length} alerts (total: $_total, unread: $_unreadCount)');
+        print('✅ 7-day filter active: showing ${_filteredAlerts.length} recent alerts');
       });
     } catch (e) {
       setState(() {
@@ -259,6 +266,7 @@ class _AlertsScreenState extends State<AlertsScreen> {
       );
     }
 
+    print('🎨 Building alerts UI with ${_filteredAlerts.length} filtered alerts');
     return RefreshIndicator(
       onRefresh: () => _loadAlerts(refresh: true),
       child: Column(
