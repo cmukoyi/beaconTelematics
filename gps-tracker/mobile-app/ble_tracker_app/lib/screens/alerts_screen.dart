@@ -25,6 +25,15 @@ class _AlertsScreenState extends State<AlertsScreen> {
   final int _limit = 20;
   bool _hasMore = true;
   bool _showUnreadOnly = false;
+  final int _daysToShow = 7; // Show only last 7 days
+  
+  // Filter alerts to only show last 7 days
+  List<GeofenceAlert> get _filteredAlerts {
+    final sevenDaysAgo = DateTime.now().subtract(Duration(days: _daysToShow));
+    return _alerts.where((alert) {
+      return alert.timestamp.isAfter(sevenDaysAgo);
+    }).toList();
+  }
 
   @override
   void initState() {
@@ -252,22 +261,44 @@ class _AlertsScreenState extends State<AlertsScreen> {
 
     return RefreshIndicator(
       onRefresh: () => _loadAlerts(refresh: true),
-      child: ListView.builder(
-        controller: _scrollController,
-        itemCount: _alerts.length + (_loadingMore ? 1 : 0),
-        itemBuilder: (context, index) {
-          if (index == _alerts.length) {
-            return const Center(
-              child: Padding(
-                padding: EdgeInsets.all(16.0),
-                child: CircularProgressIndicator(),
+      child: Column(
+        children: [
+          // Last 7 days label
+          Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                'Last $_daysToShow days',
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
+                  color: Colors.grey,
+                ),
               ),
-            );
-          }
+            ),
+          ),
+          // Alerts list
+          Expanded(
+            child: ListView.builder(
+              controller: _scrollController,
+              itemCount: _filteredAlerts.length + (_loadingMore ? 1 : 0),
+              itemBuilder: (context, index) {
+                if (index == _filteredAlerts.length) {
+                  return const Center(
+                    child: Padding(
+                      padding: EdgeInsets.all(16.0),
+                      child: CircularProgressIndicator(),
+                    ),
+                  );
+                }
 
-          final alert = _alerts[index];
-          return _buildAlertCard(alert);
-        },
+                final alert = _filteredAlerts[index];
+                return _buildAlertCard(alert);
+              },
+            ),
+          ),
+        ],
       ),
     );
   }
