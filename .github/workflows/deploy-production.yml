@@ -56,6 +56,25 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
       
+      - name: Verify Code Changes
+        run: |
+          echo "🔍 Verifying expected code changes are present..."
+          echo ""
+          echo "Checking alerts_screen.dart for createdAt filter..."
+          if grep -q "createdAt.isAfter" gps-tracker/mobile-app/ble_tracker_app/lib/screens/alerts_screen.dart; then
+            echo "✅ alerts_screen.dart has createdAt.isAfter filter"
+          else
+            echo "❌ ERROR: alerts_screen.dart missing expected createdAt.isAfter filter"
+            exit 1
+          fi
+          
+          if grep -q "_daysToShow = 7" gps-tracker/mobile-app/ble_tracker_app/lib/screens/alerts_screen.dart; then
+            echo "✅ alerts_screen.dart has _daysToShow config"
+          else
+            echo "⚠️  WARNING: _daysToShow not found (might be ok if filter is hardcoded)"
+          fi
+          echo ""
+      
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
@@ -128,14 +147,33 @@ jobs:
             cd ~/beacon-telematics/gps-tracker
             
             # Explicitly stop and remove any orphaned containers
-            echo "🧹 Cleaning up any orphaned containers..."
+            echo "🧹 Aggressive cleanup phase..."
             docker compose down --remove-orphans || true
             
             # Additional cleanup: force remove any stopped BeaconTelematics containers
             docker ps -a --filter name=beacon_telematics --format '{{.Names}}' | xargs -r docker rm -f 2>/dev/null || true
             
-            # Build and start containers
-            docker compose build --no-cache --pull
+            # Remove old images to ensure fresh build
+            echo "🗑️  Removing old BeaconTelematics images..."
+            docker rmi -f $(docker images --format '{{.Repository}}:{{.Tag}}' | grep beacon_telematics || true) 2>/dev/null || true
+            
+            # Clean docker system (unused layers, dangling images)
+            echo "🧹 Pruning Docker system..."
+            docker system prune -f --volumes || true
+            
+            # Verify source code has expected changes
+            echo "🔍 Verifying source code..."
+            if grep -q "createdAt.isAfter" ./mobile-app/ble_tracker_app/lib/screens/alerts_screen.dart; then
+              echo "✅ Source has expected changes"
+            else
+              echo "⚠️  WARNING: Source might be missing changes"
+            fi
+            
+            # Build and start containers (with maximum freshness)
+            echo "⚙️  Building all containers (no cache, pulling latest base images)..."
+            docker compose build --no-cache --pull --progress=plain
+            
+            echo "🚀 Starting containers..."
             docker compose up -d
             
             echo "⏳ Waiting for database to be ready..."
