@@ -1,10 +1,23 @@
 # Flutter Web App Dockerfile
-# Serves pre-built Flutter web files with nginx
+# Builds and serves Flutter web app with nginx
 
+# Stage 1: Build Flutter app
+FROM cirrusci/flutter:latest as builder
+
+WORKDIR /app
+
+# Copy Flutter app source
+COPY ble_tracker_app /app
+
+# Build Flutter web app
+RUN flutter pub get && \
+    flutter build web --web-renderer html --release
+
+# Stage 2: Serve with nginx
 FROM nginx:alpine
 
-# Copy pre-built Flutter web files
-COPY ble_tracker_app/build/web /usr/share/nginx/html
+# Copy built Flutter web files from builder stage
+COPY --from=builder /app/build/web /usr/share/nginx/html
 
 # Create nginx configuration for Flutter web app
 RUN echo 'server {' > /etc/nginx/conf.d/default.conf && \
