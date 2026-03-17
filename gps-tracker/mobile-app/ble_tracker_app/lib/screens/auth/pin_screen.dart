@@ -126,15 +126,18 @@ class _PinVerificationScreenState extends State<PinVerificationScreen> {
               padding: const EdgeInsets.all(32.0),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
+                crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
                   // Back Button
-                  TextButton.icon(
-                    onPressed: () => Navigator.pop(context),
-                    icon: Icon(Icons.arrow_back),
-                    label: Text('Back'),
-                    style: TextButton.styleFrom(
-                      foregroundColor: Colors.grey.shade600,
+                  Align(
+                    alignment: Alignment.topLeft,
+                    child: TextButton.icon(
+                      onPressed: () => Navigator.pop(context),
+                      icon: Icon(Icons.arrow_back),
+                      label: Text('Back'),
+                      style: TextButton.styleFrom(
+                        foregroundColor: Colors.grey.shade600,
+                      ),
                     ),
                   ),
                   SizedBox(height: 16),
