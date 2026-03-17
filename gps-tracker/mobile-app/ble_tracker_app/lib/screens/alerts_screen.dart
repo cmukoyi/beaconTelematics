@@ -31,7 +31,7 @@ class _AlertsScreenState extends State<AlertsScreen> {
   List<GeofenceAlert> get _filteredAlerts {
     final sevenDaysAgo = DateTime.now().subtract(Duration(days: _daysToShow));
     return _alerts.where((alert) {
-      return alert.timestamp.isAfter(sevenDaysAgo);
+      return alert.createdAt.isAfter(sevenDaysAgo);
     }).toList();
   }
 
