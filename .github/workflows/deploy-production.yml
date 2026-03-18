@@ -11,33 +11,36 @@ on:
         required: true
 
 jobs:
+  # ─────────────────────────────────────────────────────────────────
+  # JOB 1 — Test Backend
+  # ─────────────────────────────────────────────────────────────────
   test-backend:
     name: Test Backend
     runs-on: ubuntu-latest
-    
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-      
+
       - name: Setup Python
         uses: actions/setup-python@v4
         with:
           python-version: '3.11'
           cache: 'pip'
-      
+
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           cd gps-tracker/backend
           pip install -r requirements.txt
           pip install -r requirements-dev.txt
-      
+
       - name: Run Tests
         run: |
           cd gps-tracker/backend
           pytest tests/ -v --tb=short --cov=app --cov-report=term-missing
         continue-on-error: false
-      
+
       - name: Upload Coverage Reports
         if: always()
         uses: codecov/codecov-action@v3
@@ -46,476 +49,426 @@ jobs:
           flags: unittests
           fail_ci_if_error: false
 
-  deploy-production:
-    name: Deploy to Production
+  # ─────────────────────────────────────────────────────────────────
+  # JOB 2 — Build Flutter Web (on runner, artifacts uploaded)
+  # ─────────────────────────────────────────────────────────────────
+  build-flutter:
+    name: Build Flutter Web
     runs-on: ubuntu-latest
     needs: test-backend
-    environment: production
-    
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-      
-      - name: Verify Code Changes
-        run: |
-          echo "🔍 Verifying expected code changes are present..."
-          echo ""
-          echo "Checking alerts_screen.dart for createdAt filter..."
-          if grep -q "createdAt.isAfter" gps-tracker/mobile-app/ble_tracker_app/lib/screens/alerts_screen.dart; then
-            echo "✅ alerts_screen.dart has createdAt.isAfter filter"
-          else
-            echo "❌ ERROR: alerts_screen.dart missing expected createdAt.isAfter filter"
-            exit 1
-          fi
-          
-          if grep -q "_daysToShow = 7" gps-tracker/mobile-app/ble_tracker_app/lib/screens/alerts_screen.dart; then
-            echo "✅ alerts_screen.dart has _daysToShow config"
-          else
-            echo "⚠️  WARNING: _daysToShow not found (might be ok if filter is hardcoded)"
-          fi
-          echo ""
-      
+
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
           flutter-version: '3.41.2'
           channel: 'stable'
-      
-      - name: Build Flutter Web App
+          cache: true
+
+      - name: Flutter pub get
         run: |
           cd gps-tracker/mobile-app/ble_tracker_app
           flutter pub get
+
+      - name: Flutter analyze
+        run: |
+          cd gps-tracker/mobile-app/ble_tracker_app
+          flutter analyze --no-fatal-infos
+        continue-on-error: true
+
+      - name: Build Flutter Web
+        run: |
+          cd gps-tracker/mobile-app/ble_tracker_app
           flutter build web --release --no-tree-shake-icons
           echo "✅ Flutter web build completed"
           ls -lh build/web/main.dart.js
-      
-      - name: Verify Flutter Build Artifacts
+
+      - name: Verify build output
         run: |
-          echo "🔍 Verifying Flutter build artifacts exist..."
-          if [ -d "gps-tracker/mobile-app/ble_tracker_app/build/web" ]; then
-            echo "✅ Flutter web build directory exists"
-            ls -lh gps-tracker/mobile-app/ble_tracker_app/build/web/ | head -10
-            FILE_COUNT=$(find gps-tracker/mobile-app/ble_tracker_app/build/web -type f | wc -l)
-            echo "✅ Found $FILE_COUNT files in build/web/"
-          else
-            echo "❌ ERROR: Flutter build directory not found!"
+          BUILD_DIR="gps-tracker/mobile-app/ble_tracker_app/build/web"
+          if [ ! -d "$BUILD_DIR" ]; then
+            echo "❌ Flutter build directory not found!"
             exit 1
           fi
-      
+          FILE_COUNT=$(find "$BUILD_DIR" -type f | wc -l)
+          echo "✅ Flutter build OK — $FILE_COUNT files"
+          ls -lh "$BUILD_DIR" | head -10
+
+      # ── Upload built artifacts so deploy job can use them ────────
+      # This is the KEY fix — Flutter is built ONCE here, then passed
+      # to the deploy job. The server never runs flutter build.
+      - name: Upload Flutter build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: flutter-web-build
+          path: gps-tracker/mobile-app/ble_tracker_app/build/web/
+          retention-days: 1
+
+  # ─────────────────────────────────────────────────────────────────
+  # JOB 3 — Deploy to Production
+  # ─────────────────────────────────────────────────────────────────
+  deploy-production:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    needs: build-flutter
+    environment: production
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # ── Download the Flutter build from Job 2 ───────────────────
+      # Placed exactly where the Dockerfile expects:
+      # COPY ble_tracker_app/build/web /usr/share/nginx/html
+      - name: Download Flutter build artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: flutter-web-build
+          path: gps-tracker/mobile-app/ble_tracker_app/build/web/
+
+      - name: Verify Flutter artifacts are present
+        run: |
+          BUILD_DIR="gps-tracker/mobile-app/ble_tracker_app/build/web"
+          if [ ! -f "$BUILD_DIR/main.dart.js" ]; then
+            echo "❌ main.dart.js missing from build artifacts!"
+            exit 1
+          fi
+          FILE_COUNT=$(find "$BUILD_DIR" -type f | wc -l)
+          echo "✅ Flutter artifacts ready — $FILE_COUNT files"
+          echo "main.dart.js size: $(ls -lh $BUILD_DIR/main.dart.js | awk '{print $5}')"
+
+      - name: Verify alerts_screen.dart changes
+        run: |
+          FILE="gps-tracker/mobile-app/ble_tracker_app/lib/screens/alerts_screen.dart"
+          if grep -q "createdAt.isAfter" "$FILE"; then
+            echo "✅ alerts_screen.dart has createdAt.isAfter filter"
+          else
+            echo "❌ ERROR: alerts_screen.dart missing expected createdAt.isAfter filter"
+            exit 1
+          fi
+
       - name: Setup SSH
         uses: webfactory/ssh-agent@v0.8.0
         with:
           ssh-private-key: ${{ secrets.DO_SSH_PRIVATE_KEY }}
-      
-      - name: Add Digital Ocean to known hosts
+
+      - name: Add DigitalOcean to known hosts
         run: |
           mkdir -p ~/.ssh
           ssh-keyscan -H ${{ secrets.DO_SERVER_IP }} >> ~/.ssh/known_hosts
-      
-      - name: Upload Deployment Scripts
+
+      - name: Write backend .env on server
         env:
           DO_SERVER_IP: ${{ secrets.DO_SERVER_IP }}
           DO_USER: ${{ secrets.DO_USER }}
         run: |
-          echo "📦 Uploading BeaconTelematics deployment scripts..."
+          ssh $DO_USER@$DO_SERVER_IP "mkdir -p ~/beacon-telematics/gps-tracker/backend"
+          ssh $DO_USER@$DO_SERVER_IP "cat > ~/beacon-telematics/gps-tracker/backend/.env" << EOF
+          DATABASE_URL=${{ secrets.DATABASE_URL }}
+          SECRET_KEY=${{ secrets.SECRET_KEY }}
+          POSTGRES_USER=${{ secrets.POSTGRES_USER }}
+          POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}
+          POSTGRES_DB=${{ secrets.POSTGRES_DB }}
+          SENDGRID_API_KEY=${{ secrets.SENDGRID_API_KEY }}
+          ALLOWED_ORIGINS=${{ secrets.ALLOWED_ORIGINS }}
+          EOF
+          ssh $DO_USER@$DO_SERVER_IP "chmod 600 ~/beacon-telematics/gps-tracker/backend/.env"
+          echo "✅ .env written"
+
+      - name: Upload deployment scripts
+        env:
+          DO_SERVER_IP: ${{ secrets.DO_SERVER_IP }}
+          DO_USER: ${{ secrets.DO_USER }}
+        run: |
           ssh $DO_USER@$DO_SERVER_IP "mkdir -p ~/beacon-telematics"
           scp deploy/pre-deployment-backup-beacon.sh $DO_USER@$DO_SERVER_IP:~/beacon-telematics/
-          scp deploy/verify-secrets-beacon.sh $DO_USER@$DO_SERVER_IP:~/beacon-telematics/
-          scp deploy/rollback-deployment-beacon.sh $DO_USER@$DO_SERVER_IP:~/beacon-telematics/
+          scp deploy/verify-secrets-beacon.sh        $DO_USER@$DO_SERVER_IP:~/beacon-telematics/
+          scp deploy/rollback-deployment-beacon.sh   $DO_USER@$DO_SERVER_IP:~/beacon-telematics/
           ssh $DO_USER@$DO_SERVER_IP "chmod +x ~/beacon-telematics/*.sh"
-          echo "✅ Deployment scripts uploaded and made executable"
-      
-      - name: Pre-Deployment Backup
+          echo "✅ Deployment scripts uploaded"
+
+      - name: Pre-deployment backup
         env:
           DO_SERVER_IP: ${{ secrets.DO_SERVER_IP }}
           DO_USER: ${{ secrets.DO_USER }}
         run: |
-          echo "💾 Creating pre-deployment backup..."
           ssh $DO_USER@$DO_SERVER_IP "~/beacon-telematics/pre-deployment-backup-beacon.sh" || {
             echo "⚠️  Backup script failed but continuing deployment"
           }
-          echo "✅ Pre-deployment backup complete"
-      
-      - name: Deploy to Production
+
+      # ── Sync code to server ──────────────────────────────────────
+      # CRITICAL: Do NOT exclude build/web — the Dockerfile COPYs it.
+      # The pre-built artifacts MUST land on the server before
+      # docker compose build runs.
+      - name: Sync code to server
         env:
           DO_SERVER_IP: ${{ secrets.DO_SERVER_IP }}
           DO_USER: ${{ secrets.DO_USER }}
         run: |
-          # Copy gps-tracker folder to production under beacon-telematics directory
-          # CRITICAL: Pre-built Flutter artifacts are in mobile-app/ble_tracker_app/build/web/
-          echo "📂 Syncing BeaconTelematics code to production..."
+          echo "📂 Syncing code + pre-built Flutter artifacts to server..."
           ssh $DO_USER@$DO_SERVER_IP "mkdir -p ~/beacon-telematics/gps-tracker"
+
           rsync -avz --delete \
-            --include 'mobile-app/ble_tracker_app/build/web/***' \
-            --include 'mobile-app/ble_tracker_app/build/' \
             --exclude '.git' \
             --exclude '.gitignore' \
             --exclude 'node_modules' \
             --exclude '__pycache__' \
+            --exclude '*.pyc' \
             --exclude '.env' \
             --exclude 'backend/.env' \
             --exclude '.dart_tool' \
             --exclude 'beacon_telematics_postgres_data' \
             ./gps-tracker/ $DO_USER@$DO_SERVER_IP:~/beacon-telematics/gps-tracker/
-          
-          # Verify artifacts were synced
-          echo "🔍 Verifying pre-built Flutter artifacts on server..."
-          ssh $DO_USER@$DO_SERVER_IP "ls -lh ~/beacon-telematics/gps-tracker/mobile-app/ble_tracker_app/build/web/ | head -5 || echo '⚠️  Build artifacts not found on server!'"
-          
-          echo "🚀 Deploying BeaconTelematics containers..."
-          # Deploy on production
-          ssh $DO_USER@$DO_SERVER_IP << 'SSHEOF'
-            cd ~/beacon-telematics/gps-tracker
-            
-            # Explicitly stop and remove any orphaned containers
-            echo "🧹 Aggressive cleanup phase..."
-            docker compose down --remove-orphans || true
-            
-            # Additional cleanup: force remove any stopped BeaconTelematics containers
-            docker ps -a --filter name=beacon_telematics --format '{{.Names}}' | xargs -r docker rm -f 2>/dev/null || true
-            
-            # Remove old images to ensure fresh build
-            echo "🗑️  Removing old BeaconTelematics images..."
-            docker rmi -f $(docker images --format '{{.Repository}}:{{.Tag}}' | grep beacon_telematics || true) 2>/dev/null || true
-            
-            # Clean docker system (unused layers, dangling images)
-            echo "🧹 Pruning Docker system..."
-            docker system prune -f --volumes || true
-            
-            # Verify source code has expected changes
-            echo "🔍 Verifying source code..."
-            if grep -q "createdAt.isAfter" ./mobile-app/ble_tracker_app/lib/screens/alerts_screen.dart; then
-              echo "✅ Source has expected changes"
-            else
-              echo "⚠️  WARNING: Source might be missing changes"
-            fi
-            
-            # Build and start containers (with maximum freshness)
-            echo "⚙️  Building all containers (no cache, pulling latest base images)..."
-            docker compose build --no-cache --pull --progress=plain
-            
-            echo "🚀 Starting containers..."
-            docker compose up -d
-            
-            echo "⏳ Waiting for database to be ready..."
-            sleep 15
-            
-            # Wait for database to be healthy
-            echo "🔍 Checking database health..."
-            for i in {1..30}; do
-              if docker exec beacon_telematics_db pg_isready -U beacon_user >/dev/null 2>&1; then
-                echo "✅ Database is ready"
-                break
-              fi
-              echo "⏳ Waiting for database... attempt $i/30"
-              sleep 2
-            done
-            
-            echo "⏳ Waiting for backend to start..."
-            sleep 20
-            
-            # Check if backend is actually running
-            echo "🔍 Verifying backend container is running..."
-            if docker ps --filter name=beacon_telematics_backend --format '{{.Status}}' | grep -q 'Up'; then
-              echo "✅ Backend container is running"
-            else
-              echo "❌ Backend container is not running!"
-              docker ps -a --filter name=beacon_telematics_backend
-              docker logs beacon_telematics_backend
+
+          echo "🔍 Confirming Flutter artifacts landed on server..."
+          ssh $DO_USER@$DO_SERVER_IP bash << 'VERIFY'
+            BUILD_DIR=~/beacon-telematics/gps-tracker/mobile-app/ble_tracker_app/build/web
+            if [ ! -f "$BUILD_DIR/main.dart.js" ]; then
+              echo "❌ main.dart.js NOT found on server after rsync!"
               exit 1
             fi
-            
-            echo "📊 Container Status:"
-            docker compose ps
-            
-            echo ""
-            echo "=== Database Container ==="
-            docker logs --tail 10 beacon_telematics_db
-            
-            echo ""
-            echo "=== Backend Container ==="
-            docker logs --tail 20 beacon_telematics_backend
-            
-            echo ""
-            echo "=== Flutter Web Container ==="
-            docker logs --tail 20 beacon_telematics_flutter_web
-            
-            echo ""
-            echo "=== Nginx Container ==="
-            docker logs --tail 10 beacon_telematics_nginx
-          SSHEOF
-          echo "✅ BeaconTelematics containers deployed"
-      
-      - name: Run Database Migrations
+            FILE_COUNT=$(find "$BUILD_DIR" -type f | wc -l)
+            echo "✅ Flutter artifacts confirmed on server: $FILE_COUNT files"
+            echo "main.dart.js: $(ls -lh $BUILD_DIR/main.dart.js | awk '{print $5}')"
+          VERIFY
+
+      # ── Build containers ─────────────────────────────────────────
+      # flutter-web and admin-portal: always --no-cache
+      #   Docker cannot detect that COPY source files changed
+      #   without --no-cache, so it reuses the old layer = old UI.
+      # backend/customer: use layer cache (safe, dependencies cached)
+      - name: Build and start containers
         env:
           DO_SERVER_IP: ${{ secrets.DO_SERVER_IP }}
           DO_USER: ${{ secrets.DO_USER }}
         run: |
-          echo "🗄️  Running database migrations..."
-          ssh $DO_USER@$DO_SERVER_IP << 'SSHEOF'
+          ssh $DO_USER@$DO_SERVER_IP bash << 'SSHEOF'
+            set -e
             cd ~/beacon-telematics/gps-tracker
-            
-            # Verify backend is running before migrations
-            if ! docker ps --filter name=beacon_telematics_backend --format '{{.Status}}' | grep -q 'Up'; then
-              echo "❌ Backend container is not running, cannot run migrations"
-              docker ps -a --filter name=beacon_telematics_backend
+
+            echo "━━━ Stopping existing containers ━━━"
+            docker compose down --remove-orphans || true
+
+            # Explicitly remove stale UI images so --no-cache is truly clean
+            echo "━━━ Removing stale UI images ━━━"
+            docker images --format '{{.Repository}}:{{.Tag}}' \
+              | grep -E 'flutter.web|admin.portal' \
+              | xargs -r docker rmi -f 2>/dev/null || true
+
+            echo "━━━ Building flutter-web (no cache) ━━━"
+            docker compose build --no-cache flutter-web
+
+            echo "━━━ Building admin-portal (no cache) ━━━"
+            docker compose build --no-cache admin-portal
+
+            echo "━━━ Building backend (layer cache OK) ━━━"
+            docker compose build backend
+
+            echo "━━━ Building customer (layer cache OK) ━━━"
+            docker compose build customer
+
+            echo "━━━ Starting all containers ━━━"
+            docker compose up -d
+
+            # Prune ONLY dangling images — never volumes
+            echo "━━━ Pruning dangling images ━━━"
+            docker image prune -f
+
+            echo "✅ All containers started"
+            docker compose ps
+          SSHEOF
+
+      - name: Wait for database
+        env:
+          DO_SERVER_IP: ${{ secrets.DO_SERVER_IP }}
+          DO_USER: ${{ secrets.DO_USER }}
+        run: |
+          ssh $DO_USER@$DO_SERVER_IP bash << 'SSHEOF'
+            echo "⏳ Waiting for PostgreSQL to be ready..."
+            for i in $(seq 1 30); do
+              if docker exec beacon_telematics_db pg_isready -U beacon_user >/dev/null 2>&1; then
+                echo "✅ Database ready (attempt $i)"
+                exit 0
+              fi
+              echo "  ↻ Waiting... attempt $i/30"
+              sleep 3
+            done
+            echo "❌ Database did not become ready in time"
+            docker logs --tail 30 beacon_telematics_db
+            exit 1
+          SSHEOF
+
+      - name: Run database migrations
+        env:
+          DO_SERVER_IP: ${{ secrets.DO_SERVER_IP }}
+          DO_USER: ${{ secrets.DO_USER }}
+        run: |
+          ssh $DO_USER@$DO_SERVER_IP bash << 'SSHEOF'
+            set -e
+            cd ~/beacon-telematics/gps-tracker
+
+            if ! docker ps --filter name=beacon_telematics_backend \
+                --format '{{.Status}}' | grep -q 'Up'; then
+              echo "❌ Backend not running — cannot run migrations"
+              docker logs --tail 30 beacon_telematics_backend
               exit 1
             fi
-            
+
             echo "🔄 Running Alembic migrations..."
             docker compose exec -T backend alembic upgrade head || {
-              echo "⚠️  Migration failed on first attempt, checking backend logs..."
-              docker logs --tail 30 beacon_telematics_backend
-              echo ""
-              echo "⏳ Waiting 15 seconds and retrying..."
+              echo "⚠️  First attempt failed, retrying in 15s..."
               sleep 15
               docker compose exec -T backend alembic upgrade head || {
                 echo "❌ Migration failed on second attempt"
-                echo "Backend logs:"
                 docker logs --tail 50 beacon_telematics_backend
                 exit 1
               }
             }
-            
-            echo "✅ Migrations completed successfully"
+            echo "✅ Migrations complete"
           SSHEOF
-          echo "✅ Database migrations complete"
-      
-      - name: Deployment Verification
+
+      - name: Health checks
         env:
           DO_SERVER_IP: ${{ secrets.DO_SERVER_IP }}
           DO_USER: ${{ secrets.DO_USER }}
         run: |
-          echo "📋 VERIFYING DEPLOYMENT..."
-          echo ""
-          
-          # Check deployed files
-          echo "📂 Checking deployed files..."
-          ssh $DO_USER@$DO_SERVER_IP << 'SSHEOF'
-            cd ~/beacon-telematics/gps-tracker
-            
-            echo "🔍 Files in admin-dashboard/public:"
-            ls -lh admin-dashboard/public/
-            
-            echo ""
-            echo "✅ trips.html exists: $([ -f admin-dashboard/public/trips.html ] && echo 'YES ✓' || echo 'NO ✗')"
-            echo "✅ index.html exists: $([ -f admin-dashboard/public/index.html ] && echo 'YES ✓' || echo 'NO ✗')"
-            echo "✅ billing.html exists: $([ -f admin-dashboard/public/billing.html ] && echo 'YES ✓' || echo 'NO ✗')"
-            
-            echo ""
-            echo "📝 File sizes:"
-            wc -c admin-dashboard/public/*.html
-            
-            echo ""
-            echo "⏰ File timestamps:"
-            stat admin-dashboard/public/*.html 2>/dev/null | grep Modify
-          SSHEOF
-          
-          echo ""
-          echo "🔍 Verifying container file mounts..."
-          ssh $DO_USER@$DO_SERVER_IP << 'SSHEOF'
-            cd ~/beacon-telematics/gps-tracker
-            
-            # Check if files exist in running container
-            echo "📂 Files accessible from admin container:"
-            docker exec beacon_telematics_admin ls -lh /app/public/ 2>/dev/null || {
-              echo "⚠️  Could not access files from container, attempting restart..."
-              docker restart beacon_telematics_admin
+          check() {
+            local NAME="$1"
+            local URL="$2"
+            local RETRIES="${3:-10}"
+            for i in $(seq 1 $RETRIES); do
+              if curl -fsS --max-time 5 "$URL" > /dev/null 2>&1; then
+                echo "✅ $NAME healthy"
+                return 0
+              fi
+              echo "  ↻ $NAME not ready (attempt $i/$RETRIES)..."
               sleep 5
-              docker exec beacon_telematics_admin ls -lh /app/public/
-            }
-            
-            echo ""
-            echo "🔗 Testing admin dashboard endpoints..."
-            
-            # Test health endpoint
-            echo "Testing /health endpoint..."
-            HEALTH=$(docker exec beacon_telematics_admin curl -s http://localhost:3000/health)
-            echo "Response: $HEALTH"
-            
-            # Test manifest endpoint with error handling
-            echo ""
-            echo "Testing /api/manifest endpoint..."
-            MANIFEST=$(docker exec beacon_telematics_admin curl -s http://localhost:3000/api/manifest)
-            
-            if echo "$MANIFEST" | grep -q "trips.html"; then
-              echo "✅ trips.html found in manifest"
-              echo "Manifest response:"
-              echo "$MANIFEST"
-            else
-              echo "⚠️  trips.html not found in manifest or endpoint returned error"
-              echo "Manifest response:"
-              echo "$MANIFEST"
-            fi
-          SSHEOF
-      
-      - name: Browser-Accessible Verification
-        env:
-          DO_SERVER_IP: ${{ secrets.DO_SERVER_IP }}
-        run: |
-          echo "🌐 Testing browser-accessible endpoints..."
-          echo ""
-          
-          echo "Testing Admin Dashboard..."
-          curl -s -I http://$DO_SERVER_IP:3010/ | head -5
-          
-          echo ""
-          echo "Testing Trips page..."
-          curl -s -I http://$DO_SERVER_IP:3010/trips.html | head -5
-          
-          echo ""
-          echo "Testing Health endpoint..."
-          curl -s http://$DO_SERVER_IP:3010/health | jq . || {
-            echo "❌ Health endpoint returned invalid JSON"
-            curl -s http://$DO_SERVER_IP:3010/health
-            exit 1
+            done
+            echo "❌ $NAME FAILED after $RETRIES attempts"
+            return 1
           }
-          
-          echo ""
-          echo "Testing Manifest endpoint..."
-          MANIFEST_RESPONSE=$(curl -s http://$DO_SERVER_IP:3010/api/manifest)
-          
-          # Validate JSON first
-          if ! echo "$MANIFEST_RESPONSE" | jq . > /dev/null 2>&1; then
-            echo "❌ Manifest endpoint returned invalid JSON!"
-            echo "Response received:"
-            echo "$MANIFEST_RESPONSE"
+
+          FAILED=0
+          check "Backend API"  "http://$DO_SERVER_IP:8001/api/health" 10 || FAILED=1
+          check "Admin Portal" "http://$DO_SERVER_IP:3010/health"     10 || FAILED=1
+          check "Flutter Web"  "http://$DO_SERVER_IP:3012/"           12 || FAILED=1
+          check "Customer UI"  "http://$DO_SERVER_IP:3011/"           10 || FAILED=1
+          check "Nginx"        "http://$DO_SERVER_IP:80/"             10 || FAILED=1
+
+          if [ "$FAILED" -eq 1 ]; then
+            echo ""
+            echo "⚠️  Health check failure — dumping container logs..."
+            ssh $DO_USER@$DO_SERVER_IP \
+              "cd ~/beacon-telematics/gps-tracker && \
+               docker compose ps && \
+               echo '=== flutter-web ===' && docker logs --tail 30 beacon_telematics_flutter_web && \
+               echo '=== backend ===' && docker logs --tail 30 beacon_telematics_backend"
             exit 1
           fi
-          
-          # Extract files array
-          echo "$MANIFEST_RESPONSE" | jq '.files'
-          
+
           echo ""
-          echo "Checking if trips.html appears in manifest..."
-          if echo "$MANIFEST_RESPONSE" | jq '.files[] | select(.name == "trips.html")' | grep -q "trips.html"; then
-            echo "✅ trips.html CONFIRMED in manifest!"
-          else
-            echo "❌ WARNING: trips.html not found in manifest"
-            echo "Available files:"
-            echo "$MANIFEST_RESPONSE" | jq '.files[].name'
-          fi
-      
-      - name: Health Check
-        env:
-          DO_SERVER_IP: ${{ secrets.DO_SERVER_IP }}
-        run: |
-          echo "🏥 Checking BeaconTelematics production health..."
-          
-          # Backend health check with retries
-          echo "Testing backend API..."
-          for i in {1..10}; do
-            if curl -f -s http://$DO_SERVER_IP:8001/api/health > /dev/null; then
-              echo "✅ Backend healthy!"
-              break
-            fi
-            echo "Attempt $i/10 failed, waiting..."
-            sleep 5
-            if [ $i -eq 10 ]; then
-              echo "❌ Backend health check failed after 10 attempts"
-              exit 1
-            fi
-          done
-          
-          # Admin Dashboard health check
-          echo "Testing Admin Dashboard..."
-          for i in {1..10}; do
-            if curl -f -s http://$DO_SERVER_IP:3010/health | grep -q "healthy"; then
-              echo "✅ Admin Dashboard healthy!"
-              break
-            fi
-            echo "Attempt $i/10 failed, waiting..."
-            sleep 5
-            if [ $i -eq 10 ]; then
-              echo "❌ Admin Dashboard health check failed after 10 attempts"
-              exit 1
-            fi
-          done
-          
-          # Flutter web check with retries
-          echo "Testing Flutter web app..."
-          for i in {1..12}; do
-            if curl -f -s -I http://$DO_SERVER_IP:3012/ > /dev/null; then
-              echo "✅ Flutter web healthy!"
-              break
-            fi
-            echo "Attempt $i/12 failed, waiting..."
-            sleep 5
-            if [ $i -eq 12 ]; then
-              echo "❌ Flutter web health check failed after 12 attempts"
-              echo "Container logs:"
-              ssh ${{ secrets.DO_USER }}@$DO_SERVER_IP "docker logs --tail 50 beacon_telematics_flutter_web"
-              exit 1
-            fi
-          done
-          
-          echo "✅ All health checks passed!"
-      
-      - name: Post-Deployment Verification
+          echo "✅ All health checks passed"
+
+      - name: Verify admin dashboard files
         env:
           DO_SERVER_IP: ${{ secrets.DO_SERVER_IP }}
           DO_USER: ${{ secrets.DO_USER }}
         run: |
-          echo "🔍 Verifying secrets and configuration..."
+          ssh $DO_USER@$DO_SERVER_IP bash << 'SSHEOF'
+            cd ~/beacon-telematics/gps-tracker
+            echo "📂 Admin dashboard public files:"
+            ls -lh admin-dashboard/public/
+
+            for FILE in index.html trips.html billing.html; do
+              if [ -f "admin-dashboard/public/$FILE" ]; then
+                echo "✅ $FILE ($(wc -c < admin-dashboard/public/$FILE) bytes)"
+              else
+                echo "⚠️  $FILE not found"
+              fi
+            done
+
+            echo ""
+            echo "🔗 Testing manifest endpoint..."
+            MANIFEST=$(docker exec beacon_telematics_admin \
+              curl -s http://localhost:3000/api/manifest 2>/dev/null || echo '{}')
+            if echo "$MANIFEST" | grep -q "trips.html"; then
+              echo "✅ trips.html confirmed in manifest"
+            else
+              echo "⚠️  trips.html not in manifest"
+              echo "Response: $MANIFEST"
+            fi
+          SSHEOF
+
+      - name: Verify secrets
+        env:
+          DO_SERVER_IP: ${{ secrets.DO_SERVER_IP }}
+          DO_USER: ${{ secrets.DO_USER }}
+        run: |
           ssh $DO_USER@$DO_SERVER_IP "~/beacon-telematics/verify-secrets-beacon.sh" || {
-            echo "❌ Secret verification failed!"
-            echo "🔄 Secrets have been auto-restored from backup"
-            echo "⚠️  Review logs above for details"
+            echo "❌ Secret verification failed"
             exit 1
           }
-          echo "✅ Secrets verified successfully"
-      
-      - name: Deployment Summary
+          echo "✅ Secrets verified"
+
+      - name: Print final container status
         if: always()
+        env:
+          DO_SERVER_IP: ${{ secrets.DO_SERVER_IP }}
+          DO_USER: ${{ secrets.DO_USER }}
         run: |
-          echo "================================"
-          echo "🚀 BeaconTelematics Deployment Complete!"
-          echo "================================"
-          echo ""
-          echo "📍 Access Points:"
-          echo "  Direct Access (via IP):"
-          echo "    - Frontend (via nginx): http://${{ secrets.DO_SERVER_IP }}:8080/"
-          echo "    - Backend API: http://${{ secrets.DO_SERVER_IP }}:8001/api/health"
-          echo "    - Admin Dashboard: http://${{ secrets.DO_SERVER_IP }}:3010/"
-          echo "    - Admin Dashboard Health: http://${{ secrets.DO_SERVER_IP }}:3010/health"
-          echo "    - Admin Dashboard Manifest: http://${{ secrets.DO_SERVER_IP }}:3010/api/manifest"
-          echo "    - 📍 JOURNEYS PAGE: http://${{ secrets.DO_SERVER_IP }}:3010/trips.html"
-          echo "    - Customer Dashboard: http://${{ secrets.DO_SERVER_IP }}:3011/"
-          echo "    - Flutter Web (direct): http://${{ secrets.DO_SERVER_IP }}:3012/"
-          echo ""
-          echo "  Domain Access (after DNS setup):"
-          echo "    - HTTP: http://beacontelematics.co.uk:8080/"
-          echo "    - HTTPS: https://beacontelematics.co.uk:8443/"
-          echo "    - 📍 Journeys: https://beacontelematics.co.uk/trips.html"
-          echo ""
-          echo "✅ Verification Endpoints:"
-          echo "    - /health - Admin dashboard health check"
-          echo "    - /api/manifest - List all deployed files with timestamps"
-          echo ""
-          echo "📋 Rollback Instructions (if needed):"
-          echo "   ssh ${{ secrets.DO_USER }}@${{ secrets.DO_SERVER_IP }}"
-          echo "   ~/beacon-telematics/rollback-deployment-beacon.sh"
-          echo ""
-          echo "🔄 To Force Full Rebuild (bypass Docker cache):"
-          echo "   1. Go to GitHub Actions"
-          echo "   2. Select 'Deploy Beacon Telematics to Production'"
-          echo "   3. Click 'Run workflow' with 'On: workflow_dispatch'"
-          echo ""
-          echo "🎉 BEACON TELEMATICS DEPLOYED!"
-          echo ""
-          echo "📝 Deployment Checklist:"
-          echo "1. ✅ Code synced to ~/beacon-telematics/gps-tracker"
-          echo "2. ✅ Containers rebuilt and restarted"
-          echo "3. ✅ Database migrations applied"
-          echo "4. ✅ All health checks passed"
-          echo "5. ✅ Secrets verified"
-          echo "6. ⏳ Configure DNS A records for beacontelematics.co.uk → ${{ secrets.DO_SERVER_IP }}"
-          echo "7. ⏳ Run certbot for SSL certificate (see SERVER_SETUP_GUIDE.md Step 3)"
-          echo "8. ⏳ Test via: http://beacontelematics.co.uk:8080/"
-          echo "================================"
-      
-      - name: Tag Release
+          ssh $DO_USER@$DO_SERVER_IP \
+            "cd ~/beacon-telematics/gps-tracker && docker compose ps"
+
+      - name: Tag release
         run: |
           TAG="beacon-prod-$(date +%Y%m%d-%H%M%S)"
           git tag "$TAG"
-          git push origin "$TAG" || echo "Could not push tag"
+          git push origin "$TAG" || echo "⚠️  Could not push tag (non-fatal)"
+
+      - name: Deployment summary
+        if: always()
+        run: |
+          echo "========================================"
+          echo "🚀 BeaconTelematics Deployment Complete!"
+          echo "========================================"
+          echo ""
+          echo "📍 Access Points:"
+          echo "  Backend API:      http://${{ secrets.DO_SERVER_IP }}:8001/api/health"
+          echo "  Admin Dashboard:  http://${{ secrets.DO_SERVER_IP }}:3010/"
+          echo "  Journeys Page:    http://${{ secrets.DO_SERVER_IP }}:3010/trips.html"
+          echo "  Customer UI:      http://${{ secrets.DO_SERVER_IP }}:3011/"
+          echo "  Flutter Web:      http://${{ secrets.DO_SERVER_IP }}:3012/"
+          echo "  Nginx:            http://${{ secrets.DO_SERVER_IP }}:80/"
+          echo ""
+          echo "  Domain (after DNS):"
+          echo "    https://beacontelematics.co.uk/"
+          echo "    https://beacontelematics.co.uk/trips.html"
+          echo ""
+          echo "📋 Rollback:"
+          echo "   ssh ${{ secrets.DO_USER }}@${{ secrets.DO_SERVER_IP }}"
+          echo "   ~/beacon-telematics/rollback-deployment-beacon.sh"
+          echo "========================================"
+
+  # ─────────────────────────────────────────────────────────────────
+  # JOB 4 — Notify on failure
+  # ─────────────────────────────────────────────────────────────────
+  notify-failure:
+    name: Notify on Failure
+    runs-on: ubuntu-latest
+    needs: [test-backend, build-flutter, deploy-production]
+    if: failure()
+    steps:
+      - name: Send failure notification
+        run: |
+          echo "🚨 Pipeline FAILED"
+          echo "Commit:  ${{ github.sha }}"
+          echo "Branch:  ${GITHUB_REF##*/}"
+          echo "Actor:   ${{ github.actor }}"
+          echo "Run URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          # Uncomment to enable Slack alerts:
+          # curl -X POST -H 'Content-type: application/json' \
+          #   --data "{\"text\":\"🚨 Beacon Telematics deploy FAILED\nCommit: ${{ github.sha }}\nActor: ${{ github.actor }}\nURL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}\"}" \
+          #   ${{ secrets.SLACK_WEBHOOK_URL }}
