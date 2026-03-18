@@ -474,7 +474,11 @@ class _HomeScreenState extends State<HomeScreen> {
                     if (!widget.isFirstTimeUser)
                       TextButton(
                         onPressed: () {
-                          Navigator.pop(context);
+                          Navigator.pushAndRemoveUntil(
+                            context,
+                            MaterialPageRoute(builder: (context) => const MapScreen()),
+                            (route) => false,
+                          );
                         },
                         style: TextButton.styleFrom(
                           backgroundColor: Colors.white.withOpacity(0.6),
