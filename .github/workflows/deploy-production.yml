@@ -7,6 +7,7 @@ on:
 
 jobs:
   test-backend:
+    name: Test Backend
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -14,9 +15,14 @@ jobs:
         with:
           python-version: '3.11'
           cache: 'pip'
-      - run: cd gps-tracker/backend && pip install -r requirements.txt -r requirements-dev.txt && pytest tests/ -v
+      - name: Test Backend Code
+        run: |
+          cd gps-tracker/backend
+          pip install -r requirements.txt -r requirements-dev.txt
+          pytest tests/ -v
 
   build-flutter:
+    name: Build Flutter Web
     runs-on: ubuntu-latest
     needs: test-backend
     steps:
@@ -24,8 +30,13 @@ jobs:
       - uses: subosito/flutter-action@v2
         with:
           flutter-version: '3.41.2'
+          channel: 'stable'
           cache: true
-      - run: cd gps-tracker/mobile-app/ble_tracker_app && flutter pub get && flutter build web --release
+      - name: Build Flutter Web
+        run: |
+          cd gps-tracker/mobile-app/ble_tracker_app
+          flutter pub get
+          flutter build web --release --no-tree-shake-icons
       - uses: actions/upload-artifact@v4
         with:
           name: flutter-web-build
@@ -33,6 +44,7 @@ jobs:
           retention-days: 1
 
   deploy-production:
+    name: Deploy to Production
     runs-on: ubuntu-latest
     needs: build-flutter
     environment: production
@@ -42,49 +54,25 @@ jobs:
         with:
           name: flutter-web-build
           path: gps-tracker/mobile-app/ble_tracker_app/build/web/
-
       - uses: webfactory/ssh-agent@v0.8.0
         with:
           ssh-private-key: ${{ secrets.DO_SSH_PRIVATE_KEY }}
-
-      - run: |
-          SSH_HOST="${{ secrets.DO_SERVER_IP }}"
-          SSH_USER="${{ secrets.DO_USER }}"
-          
-          ssh -o ConnectTimeout=10 -o StrictHostKeyChecking=no "$SSH_USER@$SSH_HOST" hostname && echo "SSH OK"
-          
-          # Create env
-          cat > /tmp/.env <<-EOFENV
-          DATABASE_URL=${{ secrets.DATABASE_URL }}
-          POSTGRES_USER=${{ secrets.POSTGRES_USER }}
-          POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}
-          POSTGRES_DB=${{ secrets.POSTGRES_DB }}
-          SECRET_KEY=${{ secrets.SECRET_KEY }}
-          SENDGRID_API_KEY=${{ secrets.SENDGRID_API_KEY }}
-          ALLOWED_ORIGINS=${{ secrets.ALLOWED_ORIGINS }}
-          MZONE_CLIENT_ID=${{ secrets.MZONE_CLIENT_ID }}
-          MZONE_CLIENT_SECRET=${{ secrets.MZONE_CLIENT_SECRET }}
-          MZONE_USERNAME=${{ secrets.MZONE_USERNAME }}
-          MZONE_PASSWORD=${{ secrets.MZONE_PASSWORD }}
-          FROM_EMAIL=${{ secrets.FROM_EMAIL }}
-          DEBUG=False
-          ENVIRONMENT=production
-          EOFENV
-          
-          ssh "$SSH_USER@$SSH_HOST" 'mkdir -p ~/beacon-telematics/gps-tracker/backend'
-          scp /tmp/.env "$SSH_USER@$SSH_HOST:~/beacon-telematics/gps-tracker/backend/.env"
-          ssh "$SSH_USER@$SSH_HOST" 'chmod 600 ~/beacon-telematics/gps-tracker/backend/.env'
-          
-          rsync -avz --delete --exclude .git --exclude node_modules ./gps-tracker/ "$SSH_USER@$SSH_HOST:~/beacon-telematics/gps-tracker/"
-          
-          ssh "$SSH_USER@$SSH_HOST" << "DEPLOYEOF"
-          cd ~/beacon-telematics/gps-tracker
-          docker compose down --remove-orphans || true
-          docker compose build --no-cache flutter-web admin-portal
-          docker compose build backend customer
-          docker compose up -d
-          sleep 10
-          docker compose ps
-          DEPLOYEOF
-          
-          echo "✅ Deployment complete"
+      - name: Deploy to Production Server
+        env:
+          SSH_HOST: ${{ secrets.DO_SERVER_IP }}
+          SSH_USER: ${{ secrets.DO_USER }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          SECRET_KEY: ${{ secrets.SECRET_KEY }}
+          POSTGRES_USER: ${{ secrets.POSTGRES_USER }}
+          POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+          POSTGRES_DB: ${{ secrets.POSTGRES_DB }}
+          SENDGRID_API_KEY: ${{ secrets.SENDGRID_API_KEY }}
+          ALLOWED_ORIGINS: ${{ secrets.ALLOWED_ORIGINS }}
+          MZONE_CLIENT_ID: ${{ secrets.MZONE_CLIENT_ID }}
+          MZONE_CLIENT_SECRET: ${{ secrets.MZONE_CLIENT_SECRET }}
+          MZONE_USERNAME: ${{ secrets.MZONE_USERNAME }}
+          MZONE_PASSWORD: ${{ secrets.MZONE_PASSWORD }}
+          FROM_EMAIL: ${{ secrets.FROM_EMAIL }}
+        run: |
+          chmod +x deploy/deploy.sh
+          ./deploy/deploy.sh
