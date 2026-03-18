@@ -38,8 +38,9 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _checkUserTags() async {
-    // Skip auto-navigation if explicitly told to (e.g., when adding more tags)
-    if (widget.skipAutoNavigation) {
+    // Skip auto-navigation if explicitly told to, or for first-time users
+    // (first-time users navigate to MapScreen only after adding their first tag)
+    if (widget.skipAutoNavigation || widget.isFirstTimeUser) {
       if (mounted) {
         setState(() => _checkingTags = false);
       }
