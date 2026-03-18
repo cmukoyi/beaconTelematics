@@ -376,7 +376,7 @@ class _EmailScreenState extends State<EmailScreen> {
                                       Icon(Icons.send_rounded, size: 20),
                                       SizedBox(width: 8),
                                       Text(
-                                        'Send Verification Code',
+                                        'Send Code',
                                         style: GoogleFonts.inter(
                                           fontSize: 15,
                                           fontWeight: FontWeight.w600,
