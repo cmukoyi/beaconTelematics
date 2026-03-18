@@ -120,6 +120,44 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      # ── CRITICAL: Validate all required secrets are populated ────
+      - name: Validate required secrets
+        run: |
+          REQUIRED_SECRETS=(
+            "DATABASE_URL"
+            "SECRET_KEY"
+            "POSTGRES_USER"
+            "POSTGRES_PASSWORD"
+            "POSTGRES_DB"
+            "SENDGRID_API_KEY"
+            "ALLOWED_ORIGINS"
+            "MZONE_CLIENT_ID"
+            "MZONE_CLIENT_SECRET"
+            "MZONE_USERNAME"
+            "MZONE_PASSWORD"
+          )
+          
+          MISSING=0
+          for SECRET in "${REQUIRED_SECRETS[@]}"; do
+            VALUE="${!SECRET}"
+            if [ -z "$VALUE" ]; then
+              echo "❌ MISSING SECRET: $SECRET"
+              MISSING=$((MISSING + 1))
+            else
+              echo "✅ $SECRET is set (${#VALUE} chars)"
+            fi
+          done
+          
+          if [ $MISSING -gt 0 ]; then
+            echo ""
+            echo "❌ DEPLOYMENT ABORTED: $MISSING required secrets are missing or empty!"
+            echo ""
+            echo "Add them to GitHub Repo → Settings → Secrets and variables → Actions"
+            exit 1
+          fi
+          echo ""
+          echo "✅ All required secrets are populated"
+
       # ── Download the Flutter build from Job 2 ───────────────────
       # Placed exactly where the Dockerfile expects:
       # COPY ble_tracker_app/build/web /usr/share/nginx/html
