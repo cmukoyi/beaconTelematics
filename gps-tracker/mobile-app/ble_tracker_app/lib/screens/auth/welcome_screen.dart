@@ -110,7 +110,7 @@ class WelcomeScreen extends StatelessWidget {
                             ],
                           ).createShader(bounds),
                           child: Text(
-                            'Beacon Telematics',
+                            'Asset Tracker',
                             style: GoogleFonts.poppins(
                               fontSize: 36,
                               fontWeight: FontWeight.bold,
