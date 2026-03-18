@@ -71,9 +71,9 @@ jobs:
           ENVIRONMENT=production
           EOFENV
           
-          ssh "$SSH_USER@$SSH_HOST" mkdir -p ~/beacon-telematics/gps-tracker/backend
+          ssh "$SSH_USER@$SSH_HOST" 'mkdir -p ~/beacon-telematics/gps-tracker/backend'
           scp /tmp/.env "$SSH_USER@$SSH_HOST:~/beacon-telematics/gps-tracker/backend/.env"
-          ssh "$SSH_USER@$SSH_HOST" chmod 600 ~/beacon-telematics/gps-tracker/backend/.env
+          ssh "$SSH_USER@$SSH_HOST" 'chmod 600 ~/beacon-telematics/gps-tracker/backend/.env'
           
           rsync -avz --delete --exclude .git --exclude node_modules ./gps-tracker/ "$SSH_USER@$SSH_HOST:~/beacon-telematics/gps-tracker/"
           
