@@ -1,0 +1,45 @@
+name: Rollback Production
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Git tag or commit to roll back to (leave blank for previous tag)'
+        required: false
+        default: ''
+
+jobs:
+  rollback:
+    name: Rollback Production
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # needed to access tags and history
+
+      - uses: webfactory/ssh-agent@v0.8.0
+        with:
+          ssh-private-key: ${{ secrets.DO_SSH_PRIVATE_KEY }}
+
+      - name: Rollback to ${{ inputs.version || 'previous tag' }}
+        env:
+          SSH_HOST: ${{ secrets.DO_SERVER_IP }}
+          SSH_USER: ${{ secrets.DO_USER }}
+          TARGET_VERSION: ${{ inputs.version }}
+          WRITE_SECRETS: "false"
+        run: |
+          chmod +x deploy/deploy.sh
+
+          # Checkout the target version's code locally so rsync sends the right files
+          if [ -n "$TARGET_VERSION" ]; then
+            git checkout "$TARGET_VERSION"
+            echo "Rolling back to: $TARGET_VERSION"
+          else
+            PREV=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || git rev-parse --short HEAD~1)
+            git checkout "$PREV"
+            echo "Rolling back to previous tag: $PREV"
+          fi
+
+          # Run deploy without writing secrets (WRITE_SECRETS=false)
+          ./deploy/deploy.sh

@@ -1,78 +1,68 @@
 #!/bin/bash
 ################################################################################
-# BEACON TELEMATICS - SIMPLE ROLLBACK SCRIPT
-# 
-# Purpose: Quickly restore app and database to last working state
-# Usage: bash rollback.sh
+# BEACON TELEMATICS - ROLLBACK SCRIPT
+#
+# Rolls back to the previous git tag WITHOUT touching .env (secrets stay intact).
+# Must be run directly on the production server.
+#
+# Usage:
+#   bash rollback.sh               # rollback to previous git tag
+#   bash rollback.sh v1.2.3        # rollback to specific tag/commit
 ################################################################################
 
 set -e
 
-cd /root/beacon-telematics/gps-tracker || { echo "❌ Directory not found"; exit 1; }
+TARGET="${1:-}"
+
+cd ~/beacon-telematics/gps-tracker || { echo "❌ Directory not found"; exit 1; }
 
 echo ""
 echo "🚨 ROLLBACK INITIATED"
 echo ""
 
-# Find latest backup
-LATEST_BACKUP=$(ls -t backups/*/db_backup_*.sql 2>/dev/null | head -1 || ls -t backups/*/beacon_db.sql 2>/dev/null | head -1)
-
-if [ -z "$LATEST_BACKUP" ]; then
-  echo "❌ ERROR: No database backup found in backups/"
-  echo "   Checked: /root/beacon-telematics/gps-tracker/backups/*/*.sql"
-  exit 1
+# Determine rollback target
+if [ -z "$TARGET" ]; then
+    TARGET=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || git rev-parse HEAD~1)
 fi
 
-BACKUP_DIR=$(dirname "$LATEST_BACKUP")
-echo "📦 Using backup: $LATEST_BACKUP"
+echo "  Target: $TARGET"
+echo "  Current: $(git describe --tags --abbrev=0 2>/dev/null || git rev-parse --short HEAD)"
 echo ""
 
 # Confirm
-read -p "⚠️  This will restore database and revert code. Continue? (yes/no): " response
-if [[ "$response" != "yes" && "$response" != "y" ]]; then
-  echo "Rollback cancelled"
-  exit 0
+printf "⚠️  Roll back to %s? (yes/no): " "$TARGET"
+read -r response
+if [ "$response" != "yes" ] && [ "$response" != "y" ]; then
+    echo "Rollback cancelled"
+    exit 0
 fi
 
 echo ""
-echo "🔄 Step 1: Stopping containers..."
-docker compose down -q
-echo "✅ Containers stopped"
+echo "Step 1: Reverting code to $TARGET (secrets untouched)..."
+git fetch --tags
+git checkout "$TARGET" -- .
+echo "✅ Code reverted (backend/.env NOT changed)"
 
 echo ""
-echo "🔄 Step 2: Restoring database from backup..."
-docker compose up -d db > /dev/null 2>&1
-sleep 8
-
-# Drop and restore database
-docker compose exec -T db psql -U beacon_user -c "DROP DATABASE IF EXISTS beacon_telematics;" 2>/dev/null || true
-docker compose exec -T db psql -U beacon_user -c "CREATE DATABASE beacon_telematics;" 2>/dev/null || true
-docker compose exec -T db psql -U beacon_user -d beacon_telematics < "$LATEST_BACKUP" 2>/dev/null
-
-echo "✅ Database restored"
+echo "Step 2: Stopping containers..."
+docker compose down --remove-orphans
 
 echo ""
-echo "🔄 Step 3: Reverting code to last git tag..."
-git stash > /dev/null 2>&1 || true
-LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "HEAD~1")
-git checkout "$LAST_TAG" > /dev/null 2>&1
-echo "✅ Code reverted to: $LAST_TAG"
+echo "Step 3: Rebuilding and starting services..."
+docker compose build --no-cache flutter-web admin-portal
+docker compose build backend customer
+docker compose up -d
 
 echo ""
-echo "🔄 Step 4: Restarting all services..."
-docker compose up -d > /dev/null 2>&1
-sleep 12
-
-echo "✅ Services restarted"
+echo "Step 4: Waiting for services..."
+sleep 20
+docker compose ps
 
 echo ""
 echo "================================"
-echo "✅ ROLLBACK COMPLETE!"
+echo "✅ ROLLBACK COMPLETE — $TARGET"
 echo "================================"
 echo ""
-echo "Verify app:"
-echo "  🔗 https://beacontelematics.co.uk"
-echo ""
-echo "View logs if needed:"
-echo "  📋 docker compose logs -f backend"
+echo "Verify: curl http://localhost:8001/api/health"
+echo "Logs:   docker compose logs -f backend"
 echo ""

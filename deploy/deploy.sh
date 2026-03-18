@@ -22,7 +22,37 @@ fi
 echo "✅ SSH OK"
 echo ""
 
+echo "Step 1b: Backing up current state on server..."
+ssh -o StrictHostKeyChecking=no "$SSH_USER@$SSH_HOST" << 'BACKUPEOF'
+BACKUP_DIR=~/beacon-telematics/backups/$(date +%Y%m%d_%H%M%S)
+mkdir -p "$BACKUP_DIR"
+
+# Backup .env (secrets)
+if [ -f ~/beacon-telematics/gps-tracker/backend/.env ]; then
+    cp ~/beacon-telematics/gps-tracker/backend/.env "$BACKUP_DIR/backend.env"
+    echo "  ✅ .env backed up"
+fi
+
+# Backup database
+if docker ps --format '{{.Names}}' | grep -q beacon_telematics_db; then
+    docker exec beacon_telematics_db pg_dump -U "$POSTGRES_USER" "$POSTGRES_DB" > "$BACKUP_DIR/db.sql" 2>/dev/null && echo "  ✅ Database backed up" || echo "  ⚠️  DB backup skipped (container not ready)"
+fi
+
+# Keep only last 5 backups
+ls -dt ~/beacon-telematics/backups/*/ 2>/dev/null | tail -n +6 | xargs -r rm -rf
+
+echo "✅ Backup saved to $BACKUP_DIR"
+BACKUPEOF
+echo ""
+
 echo "Step 2: Creating environment file on server..."
+
+# WRITE_SECRETS=false skips this step (used during rollback so existing secrets are preserved)
+WRITE_SECRETS=${WRITE_SECRETS:-true}
+
+if [ "$WRITE_SECRETS" = "false" ]; then
+    echo "⏭️  Skipping .env write (WRITE_SECRETS=false) — existing secrets on server preserved"
+else
 
 # Create .env file locally first
 cat > /tmp/.env << EOF
@@ -48,6 +78,8 @@ ssh -o StrictHostKeyChecking=no "$SSH_USER@$SSH_HOST" 'chmod 600 ~/beacon-telema
 rm /tmp/.env
 
 echo "✅ .env created"
+
+fi  # end WRITE_SECRETS check
 
 echo ""
 echo "Step 3: Syncing code to server..."
