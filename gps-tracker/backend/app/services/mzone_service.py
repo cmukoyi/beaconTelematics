@@ -10,10 +10,10 @@ from typing import Dict, List, Optional
 class MZoneService:
     def __init__(self):
         self.token_url = os.getenv('MZONE_TOKEN_URL', 'https://login.mzoneweb.net/connect/token')
-        self.client_id = os.getenv('MZONE_CLIENT_ID')
-        self.client_secret = os.getenv('MZONE_CLIENT_SECRET')
-        self.username = os.getenv('MZONE_USERNAME')
-        self.password = os.getenv('MZONE_PASSWORD')
+        self.client_id = os.getenv('MZONE_CLIENT_ID', 'mz-scopeuk')
+        self.client_secret = os.getenv('MZONE_CLIENT_SECRET', 'g_SkQ.B.z3TeBU$g#hVeP#c2')
+        self.username = os.getenv('MZONE_USERNAME', 'ScopeUKAPI')
+        self.password = os.getenv('MZONE_PASSWORD', 'ScopeUKAPI01!')
         self.scope = os.getenv('MZONE_SCOPE', 'mz6-api.all mz_username')
         self.grant_type = os.getenv('MZONE_GRANT_TYPE', 'password')
         self.api_base = os.getenv('MZONE_API_BASE', 'https://live.mzoneweb.net/mzone62.api')
@@ -35,56 +35,50 @@ class MZoneService:
             # Check if cached token is still valid
             if self.token_cache['token'] and self.token_cache['expires_at']:
                 if datetime.now() < self.token_cache['expires_at']:
-                    if self.debug:
-                        print(f"✅ Using cached token (expires at {self.token_cache['expires_at']})")
                     return self.token_cache['token']
-            
-            # Fetch new token
-            if self.debug:
-                print("🔐 Fetching new OAuth token from MZone...")
-            
+
+            print(f"🔐 [get_oauth_token] Fetching new token from {self.token_url}")
+            print(f"   client_id : {self.client_id}")
+            print(f"   username  : {self.username}")
+            print(f"   scope     : {self.scope}")
+            print(f"   grant_type: {self.grant_type}")
+
+            # Payload matches working test_trips_api_direct.py exactly
             payload = {
                 'client_id': self.client_id,
                 'client_secret': self.client_secret,
                 'grant_type': self.grant_type,
                 'username': self.username,
                 'password': self.password,
-                'scope': self.scope
+                'scope': self.scope,
+                'response_type': 'code id_token',
             }
-            
-            headers = {
-                'Content-Type': 'application/x-www-form-urlencoded',
-                'Accept': 'application/json'
-            }
-            
+
             response = requests.post(
                 self.token_url,
-                data=payload,  # pass dict — requests handles encoding safely
-                headers=headers,
+                data=payload,
+                headers={'Content-Type': 'application/x-www-form-urlencoded', 'Accept': 'application/json'},
                 timeout=30
             )
-            
+
+            print(f"   token HTTP status: {response.status_code}")
+
             if response.status_code == 200:
                 data = response.json()
                 token = data.get('access_token')
                 expires_in = data.get('expires_in', 3600)
-                
-                # Cache token with expiration
                 self.token_cache['token'] = token
                 self.token_cache['expires_at'] = datetime.now() + timedelta(seconds=expires_in - 60)
-                
-                if self.debug:
-                    print(f"✅ Token obtained successfully (expires in {expires_in}s)")
-                
+                print(f"✅ [get_oauth_token] Token obtained (expires in {expires_in}s)")
                 return token
             else:
-                if self.debug:
-                    print(f"❌ OAuth error: {response.status_code} - {response.text}")
+                print(f"❌ [get_oauth_token] HTTP {response.status_code}: {response.text[:300]}")
                 return None
-        
+
         except Exception as e:
-            if self.debug:
-                print(f"❌ Error fetching OAuth token: {str(e)}")
+            print(f"❌ [get_oauth_token] Exception: {str(e)}")
+            import traceback
+            traceback.print_exc()
             return None
     
     def get_all_vehicles(self) -> Optional[Dict]:
