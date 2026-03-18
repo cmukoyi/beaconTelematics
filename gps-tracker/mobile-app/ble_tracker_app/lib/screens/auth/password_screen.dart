@@ -112,7 +112,7 @@ class _PasswordScreenState extends State<PasswordScreen> {
         ScaffoldMessenger.of(context).clearSnackBars();
         Navigator.pushAndRemoveUntil(
           context,
-          MaterialPageRoute(builder: (context) => HomeScreen()),
+          MaterialPageRoute(builder: (context) => HomeScreen(isFirstTimeUser: true)),
           (route) => false,
         );
       }

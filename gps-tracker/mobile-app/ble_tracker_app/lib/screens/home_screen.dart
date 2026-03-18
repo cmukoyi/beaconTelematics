@@ -12,7 +12,10 @@ import 'package:permission_handler/permission_handler.dart';
 
 class HomeScreen extends StatefulWidget {
   final bool skipAutoNavigation;
-  const HomeScreen({Key? key, this.skipAutoNavigation = false}) : super(key: key);
+  /// True when coming straight from registration — hides map shortcut until
+  /// the user has added their first IMEI.
+  final bool isFirstTimeUser;
+  const HomeScreen({Key? key, this.skipAutoNavigation = false, this.isFirstTimeUser = false}) : super(key: key);
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -205,12 +208,14 @@ class _HomeScreenState extends State<HomeScreen> {
           _tagNameController.clear();
         });
         
-        // After successful add, navigate to MapScreen
+        // After successful add, navigate to MapScreen — clear the entire stack
+        // so there are no blank screens to pop back to.
         await Future.delayed(Duration(milliseconds: 500));
         if (mounted) {
-          Navigator.pushReplacement(
+          Navigator.pushAndRemoveUntil(
             context,
             MaterialPageRoute(builder: (context) => const MapScreen()),
+            (route) => false,
           );
           print('✅ HomeScreen: Navigated to MapScreen after adding first tag');
         }
@@ -463,60 +468,79 @@ class _HomeScreenState extends State<HomeScreen> {
                     
                     SizedBox(height: 16),
 
-                    // Back to Map Button
-                    TextButton(
-                      onPressed: () {
-                        Navigator.pop(context);
-                      },
-                      style: TextButton.styleFrom(
-                        backgroundColor: Colors.white.withOpacity(0.6),
-                        foregroundColor: AppTheme.brandPrimary,
-                        padding: EdgeInsets.symmetric(horizontal: 32, vertical: 14),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(Icons.map, size: 20),
-                          SizedBox(width: 8),
-                          Text(
-                            'Back to Map',
-                            style: GoogleFonts.inter(
-                              fontSize: 15,
-                              fontWeight: FontWeight.w600,
-                            ),
+                    // Back to Map Button — hidden for first-time users (they have
+                    // no tags yet, so the map would be a blank white screen).
+                    if (!widget.isFirstTimeUser)
+                      TextButton(
+                        onPressed: () {
+                          Navigator.pop(context);
+                        },
+                        style: TextButton.styleFrom(
+                          backgroundColor: Colors.white.withOpacity(0.6),
+                          foregroundColor: AppTheme.brandPrimary,
+                          padding: EdgeInsets.symmetric(horizontal: 32, vertical: 14),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
                           ),
-                        ],
-                      ),
-                    ).animate()
-                      .fadeIn(duration: 600.ms, delay: 400.ms)
-                      .slideY(begin: 0.2, end: 0),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.map, size: 20),
+                            SizedBox(width: 8),
+                            Text(
+                              'Back to Map',
+                              style: GoogleFonts.inter(
+                                fontSize: 15,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ).animate()
+                        .fadeIn(duration: 600.ms, delay: 400.ms)
+                        .slideY(begin: 0.2, end: 0),
+
+                    // First-time hint — shown instead of the map button
+                    if (widget.isFirstTimeUser)
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 8.0),
+                        child: Text(
+                          'Add your first asset to get started. You can access the map once a tag has been registered.',
+                          style: GoogleFonts.inter(
+                            fontSize: 13,
+                            color: Colors.grey.shade700,
+                            height: 1.5,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                      ).animate()
+                        .fadeIn(duration: 600.ms, delay: 400.ms),
                     
                     SizedBox(height: 48),
 
-                    // Feature Highlights
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        _FeatureCard(
-                          icon: Icons.location_on,
-                          label: 'Real-time\nTracking',
-                        ),
-                        SizedBox(width: 16),
-                        _FeatureCard(
-                          icon: Icons.shield,
-                          label: 'Secure &\nPrivate',
-                        ),
-                        SizedBox(width: 16),
-                        _FeatureCard(
-                          icon: Icons.bolt,
-                          label: 'Instant\nAlerts',
-                        ),
-                      ],
-                    ).animate()
-                      .fadeIn(duration: 600.ms, delay: 500.ms),
+                    // Feature Highlights — only shown for returning users
+                    if (!widget.isFirstTimeUser)
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          _FeatureCard(
+                            icon: Icons.location_on,
+                            label: 'Real-time\nTracking',
+                          ),
+                          SizedBox(width: 16),
+                          _FeatureCard(
+                            icon: Icons.shield,
+                            label: 'Secure &\nPrivate',
+                          ),
+                          SizedBox(width: 16),
+                          _FeatureCard(
+                            icon: Icons.bolt,
+                            label: 'Instant\nAlerts',
+                          ),
+                        ],
+                      ).animate()
+                        .fadeIn(duration: 600.ms, delay: 500.ms),
                   ],
                 ),
               ),
