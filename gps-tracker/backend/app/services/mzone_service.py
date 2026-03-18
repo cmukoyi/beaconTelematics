@@ -19,6 +19,8 @@ class MZoneService:
         self.grant_type = os.getenv('MZONE_GRANT_TYPE', 'password')
         self.api_base = os.getenv('MZONE_API_BASE', 'https://live.mzoneweb.net/mzone62.api')
         self.vehicle_group_id = os.getenv('MZONE_VEHICLE_GROUP_ID')
+        # Trips may belong to a different group than vehicles (can be overridden via env)
+        self.trips_group_id = os.getenv('MZONE_TRIPS_GROUP_ID', self.vehicle_group_id)
         
         # Token cache
         self.token_cache = {
@@ -282,12 +284,13 @@ class MZoneService:
                 'Accept': 'application/json'
             }
             
-            # Build OData parameters - utcStartDate, utcEndDate, vehicle_Id must be top-level query params, NOT in filter!
-            # This matches the working API format discovered during testing
+            # Build OData parameters matching the working API format:
+            # vehicleGroup_Id + utcStartDate + utcEndDate as top-level params,
+            # vehicle filter in $filter=(vehicle_Id eq {id})
             params = {
                 'utcStartDate': start_date,
                 'utcEndDate': end_date,
-                'vehicle_Id': vehicle_id,
+                '$filter': f'(vehicle_Id eq {vehicle_id})',
                 '$format': 'json',
                 '$count': 'true',
                 '$select': 'id,vehicle_Id,vehicle_Description,duration,distance,startLocationDescription,startUtcTimestamp,endLocationDescription,endUtcTimestamp,driver_Description,driverKeyCode',
@@ -295,6 +298,9 @@ class MZoneService:
                 '$skip': '0',
                 '$top': '100'
             }
+            # Add vehicleGroup_Id if configured
+            if self.trips_group_id:
+                params['vehicleGroup_Id'] = self.trips_group_id
             
             if self.debug:
                 print(f"\n{'='*70}")
