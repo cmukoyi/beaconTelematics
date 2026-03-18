@@ -19,7 +19,7 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return ActivityMonitor(
       child: MaterialApp(
-        title: 'Asset Tracker',
+        title: 'Beacon Telematics',
         theme: AppTheme.lightTheme,
         debugShowCheckedModeBanner: false,
         home: const SplashScreen(),
@@ -136,7 +136,7 @@ class _SplashScreenState extends State<SplashScreen> {
               ),
               SizedBox(height: 24),
               Text(
-                'Asset Tracker',
+                'Beacon Telematics',
                 style: TextStyle(
                   fontSize: 32,
                   fontWeight: FontWeight.bold,
