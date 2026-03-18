@@ -10,10 +10,10 @@ from typing import Dict, List, Optional
 class MZoneService:
     def __init__(self):
         self.token_url = os.getenv('MZONE_TOKEN_URL', 'https://login.mzoneweb.net/connect/token')
-        self.client_id = os.getenv('MZONE_CLIENT_ID', 'mz-scopeuk')
-        self.client_secret = os.getenv('MZONE_CLIENT_SECRET', 'g_SkQ.B.z3TeBU$g#hVeP#c2')
-        self.username = os.getenv('MZONE_USERNAME', 'ScopeUKAPI')
-        self.password = os.getenv('MZONE_PASSWORD', 'ScopeUKAPI01!')
+        self.client_id = os.getenv('MZONE_CLIENT_ID') or 'mz-scopeuk'
+        self.client_secret = os.getenv('MZONE_CLIENT_SECRET') or 'g_SkQ.B.z3TeBU$g#hVeP#c2'
+        self.username = os.getenv('MZONE_USERNAME') or 'ScopeUKAPI'
+        self.password = os.getenv('MZONE_PASSWORD') or 'ScopeUKAPI01!'
         self.scope = os.getenv('MZONE_SCOPE', 'mz6-api.all mz_username')
         self.grant_type = os.getenv('MZONE_GRANT_TYPE', 'password')
         self.api_base = os.getenv('MZONE_API_BASE', 'https://live.mzoneweb.net/mzone62.api')

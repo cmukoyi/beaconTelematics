@@ -212,7 +212,7 @@ jobs:
             docker compose build backend customer
 
             echo "━━━ Starting all containers ━━━"
-            docker compose up -d
+            docker compose up -d --force-recreate backend
 
             echo "━━━ Pruning old images ━━━"
             docker image prune -f
