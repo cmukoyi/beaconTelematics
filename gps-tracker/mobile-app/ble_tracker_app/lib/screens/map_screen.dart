@@ -2214,7 +2214,7 @@ Best regards''',
                                 Icon(Icons.route, size: 64, color: Colors.grey.shade400),
                                 SizedBox(height: 16),
                                 Text(
-                                  'No trips found',
+                                  'No Journeys found',
                                   style: GoogleFonts.inter(
                                     fontSize: 16,
                                     fontWeight: FontWeight.w500,
