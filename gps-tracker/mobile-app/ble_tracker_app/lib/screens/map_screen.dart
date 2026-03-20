@@ -4256,10 +4256,12 @@ View on $mapProvider to see the vehicle location.''';
   }
   
   Future<void> _showTripRoute(Trip trip) async {
-    // Use the effective selected vehicle's BLETag UUID — same logic as the journeys dropdown display value.
-    // _selectedTripVehicle defaults to null until user changes dropdown; fall back to _vehicles.first.
-    final effectiveVehicleId = _selectedTripVehicle?.id ?? (_vehicles.isNotEmpty ? _vehicles.first.id : null);
-    final customName = effectiveVehicleId != null ? _vehicleCustomNames[effectiveVehicleId] : null;
+    // The custom name is stored in vehicle.description (set as device_name by user).
+    // _vehicleCustomNames map may be empty; use vehicle.description as the authoritative name.
+    final effectiveVehicle = _selectedTripVehicle ?? (_vehicles.isNotEmpty ? _vehicles.first : null);
+    final customName = effectiveVehicle != null
+        ? (_vehicleCustomNames[effectiveVehicle.id] ?? effectiveVehicle.description)
+        : null;
     Navigator.push(
       context,
       MaterialPageRoute(
