@@ -795,10 +795,11 @@ class _MapScreenState extends State<MapScreen> {
                         final description = tag['description'];
                         final deviceName = tag['device_name'];
                         final imei = tag['imei'];
-                        // Show IMEI when toggle is on, otherwise prioritize description > device_name > IMEI
+                        final customName = tagId != null ? _vehicleCustomNames[tagId] : null;
+                        // Show IMEI when toggle is on, otherwise prioritize custom name > description > device_name > IMEI
                         final displayName = showImei 
                           ? (imei ?? 'Unknown Tracker')
-                          : (description ?? deviceName ?? imei ?? 'Unknown Tracker');
+                          : (customName ?? description ?? deviceName ?? imei ?? 'Unknown Tracker');
                         return DropdownMenuItem<String>(
                           value: tagId,
                           child: Text(displayName),
@@ -4245,7 +4246,8 @@ View on $mapProvider to see the vehicle location.''';
   }
   
   Future<void> _showTripRoute(Trip trip) async {
-    final customName = _vehicleCustomNames[trip.vehicleId];
+    // Use _selectedTripVehicle.id (BLETag UUID) as key — trip.vehicleId is MZone's UUID, not BLETag UUID
+    final customName = _vehicleCustomNames[_selectedTripVehicle?.id ?? trip.vehicleId];
     Navigator.push(
       context,
       MaterialPageRoute(
