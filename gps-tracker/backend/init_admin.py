@@ -30,8 +30,8 @@ def init_admin_user():
     engine = create_engine(database_url)
     SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
     
-    # Create tables
-    Base.metadata.create_all(bind=engine)
+    # Create tables (checkfirst=True prevents crash on already-existing indexes/tables)
+    Base.metadata.create_all(bind=engine, checkfirst=True)
     
     db = SessionLocal()
     
