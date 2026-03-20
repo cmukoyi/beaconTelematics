@@ -311,10 +311,19 @@ jobs:
           check "Customer UI"  "http://$DO_SERVER_IP:3011"            || FAILED=1
 
           if [ "$FAILED" -eq 1 ]; then
+            echo "❌ Health checks failed — collecting logs..."
             ssh $DO_USER@$DO_SERVER_IP \
               'cd ~/beacon-telematics/gps-tracker && \
                docker compose ps && \
-               docker logs --tail 20 beacon_telematics_backend'
+               docker logs --tail 30 beacon_telematics_backend'
+            echo ""
+            echo "🔁 AUTO-ROLLBACK: redeploying previous image..."
+            ssh $DO_USER@$DO_SERVER_IP \
+              'cd ~/beacon-telematics/gps-tracker && \
+               docker compose up -d --force-recreate && \
+               sleep 8 && \
+               docker compose ps'
+            echo "⚠️  Rollback attempted. Marking deployment as FAILED."
             exit 1
           fi
 
