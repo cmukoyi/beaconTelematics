@@ -658,9 +658,19 @@ class _MapScreenState extends State<MapScreen> {
     List<dynamic> availableTags = [];
     bool showImei = false; // Toggle to show IMEI instead of description
     
-    // Load available tags/trackers
+    // Load available tags/trackers AND ensure custom names are fresh
     try {
-      availableTags = await _authService.getBLETags();
+      final results = await Future.wait([
+        _authService.getBLETags(),
+        _authService.getAllCustomVehicleNames(),
+      ]);
+      availableTags = results[0] as List<dynamic>;
+      final freshCustomNames = results[1] as Map<String, String>;
+      if (mounted) {
+        setState(() {
+          _vehicleCustomNames = freshCustomNames;
+        });
+      }
       if (availableTags.isNotEmpty) {
         selectedTrackerId = availableTags[0]['id']?.toString() ?? availableTags[0]['imei']?.toString();
       }
