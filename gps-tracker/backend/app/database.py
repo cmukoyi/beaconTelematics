@@ -19,13 +19,14 @@ def get_db():
         db.close()
 
 def init_db():
-    """Initialize database tables - only creates tables that don't already exist."""
+    """Initialize database tables - skip if tables already exist (e.g., from backup restore)"""
     inspector = inspect(engine)
-    existing_tables = set(inspector.get_table_names())
+    existing_tables = inspector.get_table_names()
+    
+    # If tables already exist, database is already initialized
     if existing_tables:
-        print(f"Database has {len(existing_tables)} existing tables. Checking for new tables...")
-    for table in Base.metadata.sorted_tables:
-        if table.name not in existing_tables:
-            print(f"Creating table: {table.name}")
-            table.create(bind=engine)
-    print("Database initialization complete.")
+        print(f"Database already initialized with {len(existing_tables)} tables. Skipping init_db().")
+        return
+    
+    # Create tables only if database is empty
+    Base.metadata.create_all(bind=engine)
