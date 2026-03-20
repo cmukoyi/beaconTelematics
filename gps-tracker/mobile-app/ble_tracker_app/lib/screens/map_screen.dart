@@ -1195,7 +1195,7 @@ View on $mapProvider to see the vehicle location.''';
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        vehicle.description,
+                        _vehicleCustomNames[vehicle.id] ?? vehicle.description,
                         style: GoogleFonts.poppins(
                           fontSize: 18,
                           fontWeight: FontWeight.w600,
@@ -1203,6 +1203,7 @@ View on $mapProvider to see the vehicle location.''';
                       ),
                       Text(
                         'Registration: ${vehicle.registration ?? 'N/A'}',
+
                         style: GoogleFonts.inter(
                           fontSize: 12,
                           color: Colors.grey[600],
@@ -1893,7 +1894,7 @@ View on $mapProvider to see the vehicle location.''';
                   ),
                   SizedBox(height: 16),
                   Text(
-                    'Loading vehicle locations...',
+                    'Loading asset locations...',
                     style: GoogleFonts.inter(
                       fontSize: 14,
                       fontWeight: FontWeight.w500,
@@ -2164,7 +2165,7 @@ View on $mapProvider to see the vehicle location.''';
                                 Icon(Icons.directions_car, size: 18, color: AppTheme.brandPrimary),
                                 SizedBox(width: 8),
                                 Text(
-                                  vehicle.description,
+                                  _vehicleCustomNames[vehicle.id] ?? vehicle.description,
                                   style: GoogleFonts.inter(
                                     fontSize: 15,
                                     fontWeight: FontWeight.w500,
@@ -4244,10 +4245,11 @@ View on $mapProvider to see the vehicle location.''';
   }
   
   Future<void> _showTripRoute(Trip trip) async {
+    final customName = _vehicleCustomNames[trip.vehicleId];
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (context) => TripDetailScreen(trip: trip),
+        builder: (context) => TripDetailScreen(trip: trip, customAssetName: customName),
       ),
     );
   }

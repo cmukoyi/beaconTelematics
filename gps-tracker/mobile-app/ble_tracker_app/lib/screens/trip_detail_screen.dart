@@ -11,7 +11,8 @@ import 'package:ble_tracker_app/widgets/map_bubble.dart';
 
 class TripDetailScreen extends StatefulWidget {
   final Trip trip;
-  const TripDetailScreen({Key? key, required this.trip}) : super(key: key);
+  final String? customAssetName;
+  const TripDetailScreen({Key? key, required this.trip, this.customAssetName}) : super(key: key);
 
   @override
   State<TripDetailScreen> createState() => _TripDetailScreenState();
@@ -378,7 +379,7 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
                               color: AppTheme.brandPrimary.withOpacity(0.1),
                               borderRadius: BorderRadius.circular(8),
                             ),
-                            child: Icon(Icons.directions_car, size: 18, color: AppTheme.brandPrimary),
+                            child: Icon(Icons.inventory_2, size: 18, color: AppTheme.brandPrimary),
                           ),
                           SizedBox(width: 12),
                           Expanded(
@@ -386,14 +387,14 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(
-                                  'Vehicle',
+                                  'Asset',
                                   style: GoogleFonts.inter(
                                     fontSize: 12,
                                     color: Colors.grey.shade600,
                                   ),
                                 ),
                                 Text(
-                                  widget.trip.vehicleDescription,
+                                  widget.customAssetName ?? widget.trip.vehicleDescription,
                                   style: GoogleFonts.inter(
                                     fontSize: 14,
                                     fontWeight: FontWeight.w600,
