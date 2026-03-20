@@ -4256,8 +4256,10 @@ View on $mapProvider to see the vehicle location.''';
   }
   
   Future<void> _showTripRoute(Trip trip) async {
-    // Use _selectedTripVehicle.id (BLETag UUID) as key — trip.vehicleId is MZone's UUID, not BLETag UUID
-    final customName = _vehicleCustomNames[_selectedTripVehicle?.id ?? trip.vehicleId];
+    // Use the effective selected vehicle's BLETag UUID — same logic as the journeys dropdown display value.
+    // _selectedTripVehicle defaults to null until user changes dropdown; fall back to _vehicles.first.
+    final effectiveVehicleId = _selectedTripVehicle?.id ?? (_vehicles.isNotEmpty ? _vehicles.first.id : null);
+    final customName = effectiveVehicleId != null ? _vehicleCustomNames[effectiveVehicleId] : null;
     Navigator.push(
       context,
       MaterialPageRoute(
