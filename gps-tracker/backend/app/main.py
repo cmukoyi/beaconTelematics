@@ -187,10 +187,12 @@ app.include_router(admin_router)
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# CORS middleware - allow all origins for development
+# CORS middleware - restrict to known origins in production
+_cors_origins_env = os.getenv("CORS_ORIGINS", "https://beacontelematics.co.uk,https://www.beacontelematics.co.uk")
+_allowed_origins = [o.strip() for o in _cors_origins_env.split(",") if o.strip()]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # In production, specify exact origins
+    allow_origins=_allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
