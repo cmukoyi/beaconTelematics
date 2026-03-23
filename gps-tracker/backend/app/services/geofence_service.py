@@ -59,13 +59,16 @@ class GeofenceService:
         Check all armed POIs for a tracker and generate alerts if needed
         Returns list of generated alerts
         """
-        # Get all armed POIs for this tracker
+        # Get all armed POIs for this tracker.
+        # with_for_update() acquires a row-level lock so concurrent calls
+        # (e.g. background poller + manual refresh) cannot read stale state
+        # and each generate the same alert simultaneously.
         armed_links = db.query(POITrackerLink).filter(
             and_(
                 POITrackerLink.tracker_id == tracker_id,
                 POITrackerLink.is_armed == True
             )
-        ).all()
+        ).with_for_update().all()
         
         if not armed_links:
             return []
@@ -123,14 +126,17 @@ class GeofenceService:
         """
         alerts = []
         
-        # Get the POI-tracker link to access last_known_state
+        # Get the POI-tracker link with a row-level lock.
+        # This is the critical guard against the race condition where two concurrent
+        # executions both read last_known_state before either commits the update,
+        # causing identical alerts to fire within milliseconds of each other.
         link = db.query(POITrackerLink).filter(
             and_(
                 POITrackerLink.poi_id == poi.id,
                 POITrackerLink.tracker_id == tracker_id,
                 POITrackerLink.is_armed == True
             )
-        ).first()
+        ).with_for_update().first()
         
         if not link:
             logger.warning(f"No armed link found for POI {poi.id} and tracker {tracker_id}")
@@ -181,8 +187,20 @@ class GeofenceService:
             link.last_state_check = datetime.now(timezone.utc)
             db.add(link)
         
-        # Generate alert ONLY if strict pair condition met
+        # Generate alert ONLY if strict pair condition met.
+        # Secondary duplicate guard: even with the row lock, check that no identical
+        # alert was already inserted this cycle (e.g. by the mock-location test endpoint).
         if should_alert and event_type:
+            # Re-read state after acquiring lock — if another transaction already
+            # updated last_known_state, the transition is no longer valid.
+            db.refresh(link)
+            if link.last_known_state != last_state:
+                logger.warning(
+                    f"RACE GUARD: state changed under lock for '{poi.name}' / tracker {tracker_id}. "
+                    f"Was {last_state.value}, now {link.last_known_state.value}. Skipping alert."
+                )
+                return alerts
+
             alert = GeofenceAlert(
                 poi_id=poi.id,
                 tracker_id=tracker_id,
