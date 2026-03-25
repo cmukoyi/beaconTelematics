@@ -181,18 +181,20 @@ class GeofenceService:
             # Still outside - no alert (waiting for ENTRY)
             logger.debug(f"No change for {poi.name}, tracker {tracker_id}: still OUTSIDE (waiting for ENTRY)")
         
-        # Update state tracking - only update if state actually changed or was unknown
-        if last_state != current_state:
+        # Handle UNKNOWN state: update to current state, no alert, no race guard needed
+        if last_state == GeofenceState.UNKNOWN:
             link.last_known_state = current_state
             link.last_state_check = datetime.now(timezone.utc)
             db.add(link)
-        
+
         # Generate alert ONLY if strict pair condition met.
-        # Secondary duplicate guard: even with the row lock, check that no identical
-        # alert was already inserted this cycle (e.g. by the mock-location test endpoint).
-        if should_alert and event_type:
-            # Re-read state after acquiring lock — if another transaction already
-            # updated last_known_state, the transition is no longer valid.
+        # IMPORTANT: db.refresh() must come BEFORE we write link.last_known_state — if the
+        # refresh happens after the in-memory update it resets our change back to the DB
+        # value (pre-commit), so the state never gets saved and every subsequent check fires
+        # another alert for the same transition (the "36 exits" bug).
+        elif should_alert and event_type:
+            # Re-read state from DB — race guard: if a concurrent transaction already
+            # advanced the state, this transition is no longer valid.
             db.refresh(link)
             if link.last_known_state != last_state:
                 logger.warning(
@@ -200,6 +202,13 @@ class GeofenceService:
                     f"Was {last_state.value}, now {link.last_known_state.value}. Skipping alert."
                 )
                 return alerts
+
+            # Update state AFTER the refresh so the refresh cannot wipe out our change.
+            # This is what persists the new state (e.g. INSIDE→OUTSIDE) to the DB on commit,
+            # preventing the same transition from being re-detected on the next call.
+            link.last_known_state = current_state
+            link.last_state_check = datetime.now(timezone.utc)
+            db.add(link)
 
             alert = GeofenceAlert(
                 poi_id=poi.id,
