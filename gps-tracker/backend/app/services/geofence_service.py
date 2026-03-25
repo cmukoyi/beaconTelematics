@@ -46,7 +46,25 @@ class GeofenceService:
         """Check if coordinates are inside a geofence"""
         distance = GeofenceService.calculate_distance(lat, lon, poi_lat, poi_lon)
         return distance <= radius
-    
+
+    @staticmethod
+    def _get_last_alert_type(
+        db: Session,
+        tracker_id: str
+    ) -> Optional[GeofenceEventType]:
+        """
+        Return the event_type of the most recently generated alert for this tracker
+        across ALL POIs, or None if no alerts exist yet.
+        Used to enforce the global EXIT↔ENTRY alternation rule.
+        """
+        last = (
+            db.query(GeofenceAlert)
+            .filter(GeofenceAlert.tracker_id == tracker_id)
+            .order_by(GeofenceAlert.created_at.desc())
+            .first()
+        )
+        return last.event_type if last else None
+
     @staticmethod
     def check_geofences_for_tracker(
         db: Session,
@@ -74,7 +92,15 @@ class GeofenceService:
             return []
         
         generated_alerts = []
-        
+
+        # Seed the global last alert type from DB so the pairing rule is enforced
+        # across calls and across different POIs within the same call.
+        # Rule: EXIT must be followed by ENTRY and vice-versa. Two consecutive alerts
+        # of the same type (e.g. ENTRY then ENTRY for different POIs) are suppressed.
+        last_alert_type: Optional[GeofenceEventType] = GeofenceService._get_last_alert_type(
+            db, tracker_id
+        )
+
         for link in armed_links:
             poi = db.query(POI).filter(
                 and_(
@@ -90,17 +116,24 @@ class GeofenceService:
             if poi.poi_type == 'single':
                 # Single location POI - monitor entry/exit at origin
                 alerts = GeofenceService._check_single_poi(
-                    db, poi, tracker_id, user_id, current_lat, current_lon
+                    db, poi, tracker_id, user_id, current_lat, current_lon,
+                    last_global_event_type=last_alert_type
                 )
                 generated_alerts.extend(alerts)
             
             elif poi.poi_type == 'route':
                 # Delivery route - monitor exit from origin and entry to destination
                 alerts = GeofenceService._check_route_poi(
-                    db, poi, tracker_id, user_id, current_lat, current_lon
+                    db, poi, tracker_id, user_id, current_lat, current_lon,
+                    last_global_event_type=last_alert_type
                 )
                 generated_alerts.extend(alerts)
-        
+
+            # Advance the global sentinel so the NEXT POI in this same call
+            # also sees the correct last event type (even before the DB commit).
+            if alerts:
+                last_alert_type = alerts[-1].event_type
+
         if generated_alerts:
             db.commit()
         
@@ -113,16 +146,20 @@ class GeofenceService:
         tracker_id: str,
         user_id: str,
         current_lat: float,
-        current_lon: float
+        current_lon: float,
+        last_global_event_type: Optional[GeofenceEventType] = None
     ) -> List[GeofenceAlert]:
         """
         Check single location POI for entry/exit events using STRICT PAIRING logic.
-        
-        Strict Pairing Rules:
-        - If last_known_state == INSIDE → only alert on EXIT (tracker leaves)
+
+        Per-POI Strict Pairing Rules:
+        - If last_known_state == INSIDE  → only alert on EXIT  (tracker leaves)
         - If last_known_state == OUTSIDE → only alert on ENTRY (tracker enters)
         - If last_known_state == UNKNOWN → update state but DO NOT alert
-        - Alerts fire in strict pairs: EXIT → ENTRY → EXIT → ENTRY...
+
+        Global Pairing Rule (enforced via last_global_event_type):
+        - Alerts must strictly alternate EXIT ↔ ENTRY across ALL POIs.
+        - A second consecutive EXIT or ENTRY is suppressed regardless of per-POI state.
         """
         alerts = []
         
@@ -181,6 +218,19 @@ class GeofenceService:
             # Still outside - no alert (waiting for ENTRY)
             logger.debug(f"No change for {poi.name}, tracker {tracker_id}: still OUTSIDE (waiting for ENTRY)")
         
+        # Global pairing guard: EXIT must follow ENTRY and ENTRY must follow EXIT
+        # across ALL POIs for this tracker.  Suppress any alert that would produce
+        # two consecutive events of the same type.
+        if should_alert and event_type and last_global_event_type is not None:
+            if event_type == last_global_event_type:
+                logger.warning(
+                    f"GLOBAL PAIR GUARD: Suppressing {event_type.value} for '{poi.name}' / "
+                    f"tracker {tracker_id} — last global alert was also "
+                    f"{last_global_event_type.value}. Alerts must alternate EXIT ↔ ENTRY."
+                )
+                should_alert = False
+                event_type = None
+
         # Handle UNKNOWN state: update to current state, no alert, no race guard needed
         if last_state == GeofenceState.UNKNOWN:
             link.last_known_state = current_state
@@ -240,7 +290,8 @@ class GeofenceService:
         tracker_id: str,
         user_id: str,
         current_lat: float,
-        current_lon: float
+        current_lon: float,
+        last_global_event_type: Optional[GeofenceEventType] = None
     ) -> List[GeofenceAlert]:
         """Check delivery route POI for origin exit and destination entry"""
         alerts = []
@@ -279,67 +330,58 @@ class GeofenceService:
             if time_since_last.total_seconds() < 60:  # 60 second debounce
                 return alerts
         
+        # Determine what event type this route POI *would* generate, then apply the
+        # global pair guard before creating the actual alert.
+        pending_event_type: Optional[GeofenceEventType] = None
+        pending_location_name: Optional[str] = None
+
         # Check for package leaving origin
         if last_alert and last_alert.event_type == GeofenceEventType.ENTRY:
-            # Last event was entering origin, check if we've left
             if not is_at_origin:
-                alert = GeofenceAlert(
-                    poi_id=poi.id,
-                    tracker_id=tracker_id,
-                    user_id=user_id,
-                    event_type=GeofenceEventType.EXIT,
-                    latitude=current_lat,
-                    longitude=current_lon,
-                    is_read=False
-                )
-                db.add(alert)
-                alerts.append(alert)
-                logger.info(f"Route alert: Package LEFT origin for {poi.name}")
-                GeofenceService._send_email_alert(
-                    db, user_id, tracker_id, poi, GeofenceEventType.EXIT, 
-                    current_lat, current_lon, location_name="origin"
-                )
-        
-        # Check for package arriving at destination
-        elif not last_alert or (last_alert and last_alert.event_type == GeofenceEventType.EXIT):
-            # Either no events yet, or last event was leaving origin
+                pending_event_type = GeofenceEventType.EXIT
+                pending_location_name = "origin"
+
+        # Check for package arriving at destination (no prior alert, or last was EXIT)
+        elif not last_alert or last_alert.event_type == GeofenceEventType.EXIT:
             if is_at_destination:
-                alert = GeofenceAlert(
-                    poi_id=poi.id,
-                    tracker_id=tracker_id,
-                    user_id=user_id,
-                    event_type=GeofenceEventType.ENTRY,
-                    latitude=current_lat,
-                    longitude=current_lon,
-                    is_read=False
+                pending_event_type = GeofenceEventType.ENTRY
+                pending_location_name = "destination"
+            elif not last_alert and is_at_origin:
+                # First ever check and package is sitting at origin: record initial ENTRY
+                pending_event_type = GeofenceEventType.ENTRY
+                pending_location_name = "origin"
+
+        # Global pairing guard — same rule as single POI: no two consecutive same-type alerts.
+        if pending_event_type is not None and last_global_event_type is not None:
+            if pending_event_type == last_global_event_type:
+                logger.warning(
+                    f"GLOBAL PAIR GUARD (route): Suppressing {pending_event_type.value} for "
+                    f"'{poi.name}' / tracker {tracker_id} — last global alert was also "
+                    f"{last_global_event_type.value}. Alerts must alternate EXIT ↔ ENTRY."
                 )
-                db.add(alert)
-                alerts.append(alert)
-                logger.info(f"Route alert: Package ARRIVED at destination for {poi.name}")
-                GeofenceService._send_email_alert(
-                    db, user_id, tracker_id, poi, GeofenceEventType.ENTRY, 
-                    current_lat, current_lon, location_name="destination"
-                )
-        
-        # First check - package is at origin
-        elif not last_alert and is_at_origin:
+                pending_event_type = None
+
+        if pending_event_type is not None:
             alert = GeofenceAlert(
                 poi_id=poi.id,
                 tracker_id=tracker_id,
                 user_id=user_id,
-                event_type=GeofenceEventType.ENTRY,
+                event_type=pending_event_type,
                 latitude=current_lat,
                 longitude=current_lon,
                 is_read=False
             )
             db.add(alert)
             alerts.append(alert)
-            logger.info(f"Route alert: Package AT origin for {poi.name}")
-            GeofenceService._send_email_alert(
-                db, user_id, tracker_id, poi, GeofenceEventType.ENTRY, 
-                current_lat, current_lon, location_name="origin"
+            logger.info(
+                f"Route alert: Package {'LEFT' if pending_event_type == GeofenceEventType.EXIT else 'ARRIVED AT'} "
+                f"{pending_location_name} for {poi.name}"
             )
-        
+            GeofenceService._send_email_alert(
+                db, user_id, tracker_id, poi, pending_event_type,
+                current_lat, current_lon, location_name=pending_location_name
+            )
+
         return alerts
     
     @staticmethod
