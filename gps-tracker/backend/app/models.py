@@ -87,9 +87,9 @@ class BLETag(Base):
     id = get_uuid_column()
     user_id = get_uuid_fk("users.id")
     imei = Column(String(50), unique=True, nullable=False, index=True)
-    device_name = Column(String(100))
+    device_name = Column(String(100))  # User's custom name for this tag (shown in alerts & UI)
     device_model = Column(String(100))
-    description = Column(String(255))  # Vehicle description from MZone API
+    description = Column(String(255))  # Vehicle description synced from MZone API — DO NOT use in alerts or display; use device_name instead
     mzone_vehicle_id = Column(String(100), index=True)  # Cached MZone vehicle_Id for faster trips API
     mac_address = Column(String(17))  # Format: XX:XX:XX:XX:XX:XX
     is_active = Column(Boolean, default=True)

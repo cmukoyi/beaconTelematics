@@ -404,13 +404,12 @@ class GeofenceService:
             # Get tracker details
             tracker = db.query(BLETag).filter(BLETag.id == tracker_id).first()
             if tracker:
-                # Priority: description > device_name > IMEI (last 4 digits) > generic name
-                if tracker.description:
-                    tracker_name = tracker.description
-                elif tracker.device_name:
+                # Use the user's custom name only — never the MZone API description
+                # (tracker.description is overwritten by the location poller from MZone).
+                # Priority: device_name (user-set) > IMEI last 4 digits > generic label
+                if tracker.device_name:
                     tracker_name = tracker.device_name
                 elif tracker.imei:
-                    # Use last 4 digits of IMEI for user-friendly identification
                     tracker_name = f"GPS Tracker ({tracker.imei[-4:]})"
                 else:
                     tracker_name = "GPS Tracker"
