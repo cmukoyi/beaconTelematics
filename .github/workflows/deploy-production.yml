@@ -144,6 +144,10 @@ jobs:
           ENV_MZONE_PASSWORD: ${{ secrets.MZONE_PASSWORD }}
           ENV_MZONE_VEHICLE_GROUP_ID: ${{ secrets.MZONE_VEHICLE_GROUP_ID }}
           ENV_FROM_EMAIL: ${{ secrets.FROM_EMAIL }}
+          ENV_TRACKSOLID_ACCOUNT: ${{ secrets.TRACKSOLID_ACCOUNT }}
+          ENV_TRACKSOLID_PASSWORD: ${{ secrets.TRACKSOLID_PASSWORD }}
+          ENV_TRACKSOLID_USER_ID: ${{ secrets.TRACKSOLID_USER_ID }}
+          ENV_TRACKSOLID_ORG_ID: ${{ secrets.TRACKSOLID_ORG_ID }}
         run: |
           {
             echo "DATABASE_URL=$ENV_DATABASE_URL"
@@ -161,6 +165,10 @@ jobs:
             echo "MZONE_PASSWORD=$ENV_MZONE_PASSWORD"
             echo "MZONE_VEHICLE_GROUP_ID=$ENV_MZONE_VEHICLE_GROUP_ID"
             echo "FROM_EMAIL=$ENV_FROM_EMAIL"
+            echo "TRACKSOLID_ACCOUNT=$ENV_TRACKSOLID_ACCOUNT"
+            echo "TRACKSOLID_PASSWORD=$ENV_TRACKSOLID_PASSWORD"
+            echo "TRACKSOLID_USER_ID=$ENV_TRACKSOLID_USER_ID"
+            echo "TRACKSOLID_ORG_ID=$ENV_TRACKSOLID_ORG_ID"
             echo "DEBUG=False"
             echo "ENVIRONMENT=production"
           } | ssh $DO_USER@$DO_SERVER_IP \
