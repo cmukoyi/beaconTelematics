@@ -98,6 +98,7 @@ class BLETag(Base):
     longitude = Column(String(50))
     location_description = Column(String(500))  # Formatted address from MZone API
     battery_level = Column(Integer)
+    tag_type = Column(String(50), default='scope')  # 'scope' | 'tracksolid'
     attributes = Column(JSON, nullable=True)  # Custom attributes: {field: {value, show_on_map}}
     added_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())

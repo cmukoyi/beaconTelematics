@@ -1125,6 +1125,31 @@
         let authToken = localStorage.getItem('adminToken');
         let currentUser = localStorage.getItem('currentUser');
 
+        /**
+         * Central fetch wrapper.
+         * - Attaches the Authorization header automatically.
+         * - On any 401 response: clears the stale token and redirects to login
+         *   so the user is never stuck on a blank dashboard.
+         */
+        async function apiFetch(url, options = {}) {
+            const headers = Object.assign({ 'Authorization': `Bearer ${authToken}` }, options.headers || {});
+            const response = await fetch(API_URL + url, Object.assign({}, options, { headers }));
+            if (response.status === 401) {
+                // Token expired or invalid — force fresh login
+                localStorage.removeItem('adminToken');
+                localStorage.removeItem('currentUser');
+                authToken = null;
+                currentUser = null;
+                showLoginPage();
+                document.getElementById('loginError').textContent = 'Session expired. Please log in again.';
+                document.getElementById('loginError').style.display = 'block';
+                const err = new Error('Session expired');
+                err.status = 401;
+                throw err;
+            }
+            return response;
+        }
+
         // Check if logged in
         window.addEventListener('load', function() {
             if (authToken && currentUser) {
