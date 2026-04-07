@@ -21,6 +21,7 @@ from app.services.email_service import EmailService
 from app.services.mzone_service import mzone_service
 from app.services.geofence_service import GeofenceService
 from app.services.location_poller_service import location_poller
+from app.services.device_providers import DeviceProviderFactory
 from app.routes_admin import router as admin_router
 import asyncio
 from app.schemas.poi import (
