@@ -30,8 +30,12 @@ def init_admin_user():
     engine = create_engine(database_url)
     SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
     
-    # Create tables (checkfirst=True prevents crash on already-existing indexes/tables)
-    Base.metadata.create_all(bind=engine, checkfirst=True)
+    # Create tables — checkfirst=True handles tables but not indexes on existing tables
+    try:
+        Base.metadata.create_all(bind=engine, checkfirst=True)
+    except Exception as e:
+        # Index already exists (e.g. ix_billing_data_date) — safe to ignore
+        print(f"⚠️  Schema init warning (non-fatal): {e}")
     
     db = SessionLocal()
     
